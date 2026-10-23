@@ -11,6 +11,8 @@ Il progetto è nella fase di definizione dei requisiti. Le scelte tecniche conco
 - **GraphQL con Strawberry** per l'API;
 - **React con Vite** per il frontend.
 
+Gli strumenti di sviluppo concordati sono **uv** per dipendenze e ambiente Python, **npm** per il frontend, un **Makefile** per i comandi comuni e **Docker** per l'immagine di deploy. La preparazione dell'immagine e i relativi comandi devono ancora essere implementati.
+
 Il framework web, le altre librerie e le modalità di distribuzione sono ancora da confermare. È previsto un utilizzo ridotto, con pochissimi utenti; il contenimento del consumo di RAM sul server è un obiettivo progettuale.
 
 GraphQL è stato scelto in particolare per il contratto client/server esplicito; Strawberry è già stato utilizzato dal committente in un altro progetto. SQLAlchemy e Alembic hanno ruoli complementari: definizione e utilizzo dei modelli il primo, evoluzione versionata dello schema il secondo.
@@ -18,6 +20,35 @@ GraphQL è stato scelto in particolare per il contratto client/server esplicito;
 ## Accesso
 
 L'applicazione deve prevedere l'autenticazione OAuth per i docenti. Il provider di autenticazione è da definire. Un eventuale accesso per gli studenti sarà discusso in seguito.
+
+## Entità e organizzazione dei dati
+
+- **Utente**: persona che accede all'applicazione.
+- **Corso**: una specifica edizione dell'insegnamento, per esempio Analisi 1 nell'anno accademico 2026/27; raccoglie studenti, tabelle e prove.
+- **Partecipazione al corso**: collega un utente a un corso con il relativo ruolo. I ruoli e i permessi restano da definire.
+- **Studente**: persona valutata, identificata dalla matricola; non richiede un account utente. Un eventuale collegamento a un account sarà discusso con l'accesso degli studenti.
+- **Tabella**: appartiene a un corso e contiene colonne configurabili; ogni riga rappresenta uno studente del corso. Tabelle diverse possono includere sottoinsiemi diversi di studenti. I collegamenti tra tabelle usano l'identità dello studente, non la posizione della riga.
+- **Prova**: informazioni specifiche di un compitino, scritto o orale, associate a una tabella.
+
+Si possono creare anche tabelle che non corrispondono a prove d'esame. Nella prima fase non sono previste tabelle con righe arbitrarie: una riga rappresenta sempre uno studente.
+
+### Identità degli studenti
+
+Ogni riga ha un **identificatore interno stabile** e rappresenta uno studente anche quando la matricola è temporaneamente sconosciuta. La **matricola è la chiave di collegamento tra tabelle**, non la chiave primaria tecnica della riga. Le righe senza matricola restano indipendenti e non vengono collegate tramite nome e cognome. Inserire una matricola permette di attivare i collegamenti; nella stessa tabella non sono ammesse matricole duplicate, mentre possono esistere più righe senza matricola.
+
+Una reimmatricolazione con una nuova matricola può essere trattata come uno studente distinto, senza ricostruire l'identità della persona tra matricole diverse.
+
+Nome e cognome sono colonne indipendenti della singola tabella e non costituiscono una chiave di identificazione. Lo stesso studente, identificato dalla stessa matricola, può avere nome o cognome differenti in tabelle e prove diverse. Modificare questi dati in una tabella non li aggiorna nelle altre: non è prevista un'anagrafica condivisa che ne imponga la sincronizzazione.
+
+Non unire automaticamente studenti con matricole differenti sulla base di nome e cognome. Le modalità di aggiornamento di queste colonne durante importazioni successive nella stessa tabella restano da definire.
+
+## Importazione degli iscritti
+
+Nel workflow descritto per UniPi, gli studenti si registrano agli esami sul sito di ateneo e il docente scarica l'elenco degli iscritti in formato CSV.
+
+L'applicazione deve consentire l'upload di questo CSV. Tipicamente l'importazione coincide con la creazione della tabella della prova e ne popola le righe con gli studenti registrati. Deve essere possibile aggiungere o rimuovere studenti dalla tabella anche in seguito.
+
+L'identificazione degli studenti importati avviene tramite matricola. Il formato del CSV, la gestione dei duplicati, delle importazioni successive e dei conflitti anagrafici restano da definire. La rimozione da una tabella non implica la cancellazione dello studente dalle altre tabelle o dal corso.
 
 ## Tabelle delle prove
 
@@ -31,9 +62,17 @@ L'interfaccia deve favorire l'inserimento rapido da tastiera e il lavoro su una 
 
 ## Riepilogo del corso
 
-Ogni corso deve avere una tabella riassuntiva con una colonna per ogni prova d'esame. Anche il riepilogo può contenere colonne personalizzate e colonne calcolate, per esempio la media dei compitini.
+Ogni corso deve avere una tabella riassuntiva non associata a una prova. Le sue colonne sono configurabili: il docente può scegliere quali risultati delle prove includere, in quale ordine, e aggiungere colonne personalizzate e calcolate, per esempio la media di tre compitini. Non è obbligatoria una colonna per ogni prova. È prevista la possibilità di aggiungere rapidamente colonne collegate ai risultati delle prove; i dettagli dell'interazione restano da definire.
 
 I risultati delle prove devono alimentare il riepilogo senza richiedere di reinserire i voti. Il criterio con cui una prova espone il proprio risultato al riepilogo è ancora da definire.
+
+Si distinguono colonne con dati inseriti direttamente, colonne collegate ad altre tabelle tramite matricola e colonne calcolate. Rimuovere una colonna collegata dal riepilogo non elimina la prova di origine. Anche nome e cognome nel riepilogo sono locali alla tabella; la loro inizializzazione resta da definire.
+
+### Flag DSA e DIS
+
+DSA e DIS sono due flag indipendenti nelle tabelle delle singole prove, provenienti dalle iscrizioni. Sono on/off: una cella vuota rappresenta off, non uno stato sconosciuto.
+
+Il riepilogo può includere colonne facoltative che aggregano separatamente questi flag con un OR: il risultato è on se almeno una prova del corso ha il flag attivo per quella matricola. Si considerano le prove della specifica edizione del corso, anche quando le loro colonne voto non sono presenti nel riepilogo. Non si trasferiscono i flag automaticamente agli anni successivi e non si memorizza un ulteriore flag anagrafico globale. L'aggregazione riflette i dati correnti delle prove.
 
 ## Il tipo di dato voto
 
@@ -111,6 +150,7 @@ Restano da discutere in particolare:
 - stack applicativo, librerie e schema del database MariaDB;
 - provider di autenticazione e autorizzazioni sui corsi;
 - eventuale accesso degli studenti;
+- formato CSV e regole per duplicati, reimportazioni e aggiornamento dei dati anagrafici;
 - configurazione delle colonne e delle informazioni delle prove;
 - formule, precisione dei calcoli e gestione dei valori mancanti;
 - correzione delle risposte multiple e varianti dei compiti;
