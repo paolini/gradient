@@ -14,6 +14,8 @@ La rappresentazione dei dati descritta nel README è logica e non impone tipi o 
 
 Usare uv per dipendenze e ambiente Python, npm per il frontend, un Makefile per i comandi comuni e Docker per l'immagine di deploy. L'utente ha autorizzato la preparazione degli strumenti di base; framework web e funzionalità applicative restano da definire.
 
+La base usa Python 3.14 e TypeScript per il frontend. Versionare `uv.lock` e `frontend/package-lock.json`; non versionare `.venv`, `node_modules`, output di build o segreti. Usare `make check` e `make build` per verificare la base; questi comandi non verificano un backend HTTP o un database, che non sono ancora configurati.
+
 L'utilizzo previsto è ridotto, con pochissimi utenti. Contenere il consumo di RAM sul server è un obiettivo progettuale da considerare nelle proposte tecniche.
 
 ## Vincoli funzionali da preservare

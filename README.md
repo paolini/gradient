@@ -11,7 +11,7 @@ Il progetto è nella fase di definizione dei requisiti. Le scelte tecniche conco
 - **GraphQL con Strawberry** per l'API;
 - **React con Vite** per il frontend.
 
-Gli strumenti di sviluppo concordati sono **uv** per dipendenze e ambiente Python, **npm** per il frontend, un **Makefile** per i comandi comuni e **Docker** per l'immagine di deploy. La preparazione dell'immagine e i relativi comandi devono ancora essere implementati.
+Gli strumenti di sviluppo concordati sono **uv** per dipendenze e ambiente Python, **npm** per il frontend, un **Makefile** per i comandi comuni e **Docker** per l'immagine di deploy. Il frontend usa TypeScript. La preparazione dell'immagine e i relativi comandi devono ancora essere implementati.
 
 Il framework web, le altre librerie e le modalità di distribuzione sono ancora da confermare. È previsto un utilizzo ridotto, con pochissimi utenti; il contenimento del consumo di RAM sul server è un obiettivo progettuale.
 
@@ -161,3 +161,28 @@ Le funzionalità ancora da discutere non vanno considerate già progettate o imp
 ## Indicazioni per chi contribuisce
 
 Questo file descrive il progetto e le decisioni funzionali concordate. Le istruzioni operative per gli agenti sono in [AGENTS.md](AGENTS.md).
+
+### Ambiente di sviluppo
+
+È predisposta una base di sviluppo, senza funzionalità applicative: dipendenze Python in `pyproject.toml` e `uv.lock`, e un frontend React/Vite in `frontend/` con il proprio lockfile npm. Non sono ancora configurati il backend HTTP, la connessione a MariaDB o le migrazioni.
+
+Prerequisiti: Python 3.14, uv e Node.js compatibile con la versione di Vite installata. Per questa inizializzazione sono stati usati Python 3.14.4 e Node.js 22.23.4. Docker e Make servono rispettivamente per le future immagini e per i comandi comuni.
+
+Se uv è installato in `~/.local/bin` ma non è nel PATH del terminale corrente, eseguire:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Dalla radice del repository:
+
+```bash
+make install  # uv sync --locked e npm ci per il frontend
+make check    # compatibilità delle dipendenze Python e controllo dei tipi frontend
+make build    # compilazione del frontend in frontend/dist
+make dev      # server di sviluppo del solo frontend
+```
+
+Non è necessario attivare manualmente `.venv`: i comandi Python del progetto si eseguono tramite `uv run`. Per esempio, `uv run alembic --help` mostra i comandi disponibili, ma le migrazioni non sono ancora inizializzate. Il Makefile consente di sovrascrivere `UV` e `NPM` se gli eseguibili sono installati in percorsi differenti.
+
+Gli ambienti locali, `node_modules`, i risultati delle compilazioni e i file `.env` sono esclusi dal versionamento. I lockfile vanno invece conservati in Git.
