@@ -18,6 +18,8 @@ La base usa Python 3.14 e TypeScript per il frontend. Versionare `uv.lock` e `fr
 
 L'utilizzo previsto è ridotto, con pochissimi utenti. Contenere il consumo di RAM sul server è un obiettivo progettuale da considerare nelle proposte tecniche.
 
+I file di esempio e la documentazione devono rivolgersi a uno sviluppatore generico, usando valori convenzionali come la porta MariaDB 3306. Non adattare i valori predefiniti all'ambiente personale del committente; eventuali configurazioni particolari si gestiscono localmente. Il database di sviluppo può essere gestito esternamente. `compose.example.yaml` è facoltativo; non avviare automaticamente database dai normali comandi di sviluppo. `.env.example` documenta i parametri proposti, ma la configurazione del backend non è ancora implementata. Non modificare configurazioni esterne al repository senza una richiesta specifica.
+
 ## Vincoli funzionali da preservare
 
 - Modellare ogni corso come una specifica edizione dell'insegnamento. Distinguere gli utenti che accedono dagli studenti valutati, che possono non avere un account.

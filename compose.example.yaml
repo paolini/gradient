@@ -1,0 +1,23 @@
+# Esempio facoltativo per lo sviluppo locale, non per il deploy.
+# È possibile usare invece un'istanza MariaDB già gestita esternamente.
+services:
+  mariadb:
+    image: mariadb:11.8
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-gradient}
+      MARIADB_USER: ${DB_USER:-gradient}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Impostare DB_PASSWORD nel file .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Impostare DB_ROOT_PASSWORD nel file .env}
+    ports:
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mariadb-data:

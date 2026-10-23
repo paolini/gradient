@@ -186,3 +186,28 @@ make dev      # server di sviluppo del solo frontend
 Non è necessario attivare manualmente `.venv`: i comandi Python del progetto si eseguono tramite `uv run`. Per esempio, `uv run alembic --help` mostra i comandi disponibili, ma le migrazioni non sono ancora inizializzate. Il Makefile consente di sovrascrivere `UV` e `NPM` se gli eseguibili sono installati in percorsi differenti.
 
 Gli ambienti locali, `node_modules`, i risultati delle compilazioni e i file `.env` sono esclusi dal versionamento. I lockfile vanno invece conservati in Git.
+
+### MariaDB nello sviluppo locale
+
+Il backend dovrà potersi collegare a una MariaDB esterna, anche gestita tramite un Compose condiviso con altri progetti. Il repository non impone di avviare un proprio database: `make install`, `make check`, `make build` e `make dev` non avviano container.
+
+Il file [.env.example](.env.example) descrive i parametri di connessione proposti. La lettura di questi parametri da parte del backend non è ancora implementata. Per usare un'istanza esistente, creare un database e un utente dedicati a Gradient e configurare in `.env` host, porta, nome del database e credenziali. Non serve modificare o usare il Compose di esempio.
+
+Per chi non ha già un database, [compose.example.yaml](compose.example.yaml) fornisce un esempio facoltativo con MariaDB 11.8, database e utente applicativo dedicati, volume persistente e controllo di disponibilità:
+
+```bash
+cp .env.example .env
+docker compose -p gradient-dev -f compose.example.yaml up -d --wait
+```
+
+Le password nel file di esempio sono soltanto per lo sviluppo locale. Il database è pubblicato su `127.0.0.1:3306` per l'applicazione eseguita sull'host. Se questa porta è occupata, cambiare `DB_PORT` nel file `.env`. `DB_HOST` descrive l'indirizzo raggiunto dal futuro backend: non cambia il binding del container, che resta limitato a localhost. Se il backend verrà eseguito in un container, host e porta andranno adattati alla rete Docker.
+
+È possibile copiare il servizio e la relativa dichiarazione del volume nel proprio Compose condiviso, adattando variabili e porta. I valori `MARIADB_*` creano database e utenti soltanto quando il volume è inizialmente vuoto: modificare `.env` in seguito non cambia automaticamente le credenziali o il database esistenti.
+
+Per fermare e rimuovere i container dell'esempio conservando il volume con i dati:
+
+```bash
+docker compose -p gradient-dev -f compose.example.yaml down
+```
+
+Questo file non rappresenta la configurazione di deploy e non avvia il backend o il frontend.
