@@ -2,7 +2,18 @@
 
 Applicazione web per inserire e gestire i risultati di compitini, esami scritti e orali dei corsi universitari. L'obiettivo principale è rendere l'inserimento dei voti rapido e naturale come in un foglio di calcolo, mantenendo dati strutturati e calcoli configurabili.
 
-Il progetto è nella fase di definizione dei requisiti. Database, linguaggi, framework, librerie e modalità di distribuzione sono ancora da scegliere.
+Il progetto è nella fase di definizione dei requisiti. Le scelte tecniche concordate sono:
+
+- **MariaDB** per il database;
+- **Python** per il backend;
+- **SQLAlchemy** per i modelli e l'accesso al database;
+- **Alembic** per le migrazioni dello schema;
+- **GraphQL con Strawberry** per l'API;
+- **React con Vite** per il frontend.
+
+Il framework web, le altre librerie e le modalità di distribuzione sono ancora da confermare. È previsto un utilizzo ridotto, con pochissimi utenti; il contenimento del consumo di RAM sul server è un obiettivo progettuale.
+
+GraphQL è stato scelto in particolare per il contratto client/server esplicito; Strawberry è già stato utilizzato dal committente in un altro progetto. SQLAlchemy e Alembic hanno ruoli complementari: definizione e utilizzo dei modelli il primo, evoluzione versionata dello schema il secondo.
 
 ## Accesso
 
@@ -31,7 +42,7 @@ Un voto inserito è composto da:
 - un valore numerico base decimale esatto, che può essere mancante;
 - una stringa modificatore, vuota quando non è presente.
 
-Questa è una rappresentazione logica: non stabilisce il database o il formato fisico di memorizzazione.
+Questa è una rappresentazione logica: il formato fisico di memorizzazione in MariaDB resta da definire.
 
 | Inserimento | Valore base | Modificatore |
 | --- | --- | --- |
@@ -97,7 +108,7 @@ La gestione dei tentativi ripetuti non rientra nella prima fase. Quando sarà af
 
 Restano da discutere in particolare:
 
-- database, stack applicativo e librerie;
+- stack applicativo, librerie e schema del database MariaDB;
 - provider di autenticazione e autorizzazioni sui corsi;
 - eventuale accesso degli studenti;
 - configurazione delle colonne e delle informazioni delle prove;

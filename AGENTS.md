@@ -6,11 +6,13 @@ Il progetto è nella fase di definizione dei requisiti. Leggere [README.md](READ
 
 Mantenere la documentazione in italiano. Distinguere le decisioni accettate dalle proposte e dalle questioni aperte. Aggiornare la documentazione quando vengono concordate nuove decisioni, senza presentare una funzionalità prevista come già implementata.
 
-## Scelte tecniche ancora aperte
+## Scelte tecniche e aspetti ancora aperti
 
-Database, linguaggi, framework, librerie, provider di autenticazione e distribuzione non sono stati scelti. Non trattare suggerimenti precedenti come decisioni approvate. Non introdurre dipendenze, infrastruttura o un'implementazione sulla base di questo documento: seguire la richiesta corrente dell'utente.
+Le scelte concordate sono MariaDB per il database, Python per il backend, SQLAlchemy per i modelli e l'accesso al database, Alembic per le migrazioni, GraphQL con Strawberry per l'API e React con Vite per il frontend. Il contratto client/server esplicito è una motivazione centrale della scelta di GraphQL. Il framework web, le altre librerie, il provider di autenticazione e la distribuzione sono ancora da confermare. Non trattare ulteriori suggerimenti come decisioni approvate. Non introdurre dipendenze, infrastruttura o un'implementazione sulla base di questo documento: seguire la richiesta corrente dell'utente.
 
 La rappresentazione dei dati descritta nel README è logica e non impone tipi o strutture specifici di un database.
+
+L'utilizzo previsto è ridotto, con pochissimi utenti. Contenere il consumo di RAM sul server è un obiettivo progettuale da considerare nelle proposte tecniche.
 
 ## Vincoli funzionali da preservare
 
