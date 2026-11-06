@@ -1,0 +1,1 @@
+"""Registro delle valutazioni universitarie."""

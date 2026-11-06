@@ -6,6 +6,7 @@ Il progetto è nella fase di definizione dei requisiti. Le scelte tecniche conco
 
 - **MariaDB** per il database;
 - **Python** per il backend;
+- **FastAPI con Uvicorn** per il server HTTP;
 - **SQLAlchemy** per i modelli e l'accesso al database;
 - **Alembic** per le migrazioni dello schema;
 - **GraphQL con Strawberry** per l'API;
@@ -13,7 +14,7 @@ Il progetto è nella fase di definizione dei requisiti. Le scelte tecniche conco
 
 Gli strumenti di sviluppo concordati sono **uv** per dipendenze e ambiente Python, **npm** per il frontend, un **Makefile** per i comandi comuni e **Docker** per l'immagine di deploy. Il frontend usa TypeScript. La preparazione dell'immagine e i relativi comandi devono ancora essere implementati.
 
-Il framework web, le altre librerie e le modalità di distribuzione sono ancora da confermare. È previsto un utilizzo ridotto, con pochissimi utenti; il contenimento del consumo di RAM sul server è un obiettivo progettuale.
+Le altre librerie e le modalità di distribuzione sono ancora da confermare. È previsto un utilizzo ridotto, con pochissimi utenti; il contenimento del consumo di RAM sul server è un obiettivo progettuale.
 
 GraphQL è stato scelto in particolare per il contratto client/server esplicito; Strawberry è già stato utilizzato dal committente in un altro progetto. SQLAlchemy e Alembic hanno ruoli complementari: definizione e utilizzo dei modelli il primo, evoluzione versionata dello schema il secondo.
 
@@ -164,7 +165,11 @@ Questo file descrive il progetto e le decisioni funzionali concordate. Le istruz
 
 ### Ambiente di sviluppo
 
-È predisposta una base di sviluppo, senza funzionalità applicative: dipendenze Python in `pyproject.toml` e `uv.lock`, e un frontend React/Vite in `frontend/` con il proprio lockfile npm. Non sono ancora configurati il backend HTTP, la connessione a MariaDB o le migrazioni.
+Il primo flusso applicativo consente di creare corsi, tabelle e righe studente e consultarli tramite GraphQL e interfaccia React. Le righe hanno ID stabili, matricole facoltative e nome/cognome locali alla tabella. Sono presenti configurazione MariaDB, prima migrazione Alembic e test di integrazione. Colonne custom, voti, importazione CSV e autenticazione non sono ancora implementati: questa versione è destinata allo sviluppo locale.
+
+Stato delle verifiche al 6 novembre 2026: nell'ultima sessione sono riusciti quattro test senza database, controllo dei tipi, compatibilità delle dipendenze e build frontend. La migrazione e i test di integrazione MariaDB restano da completare; il flusso completo di salvataggio e rilettura non è ancora verificato.
+
+Le dipendenze Python sono in `pyproject.toml` e `uv.lock`; il frontend React/Vite è in `frontend/`, con il proprio lockfile npm. I modelli e il backend sono nel pacchetto `gradient/`, le migrazioni in `migrations/`. Il pool del backend ha un massimo di due connessioni per processo.
 
 Prerequisiti: Python 3.14, uv e Node.js compatibile con la versione di Vite installata. Per questa inizializzazione sono stati usati Python 3.14.4 e Node.js 22.23.4. Docker e Make servono rispettivamente per le future immagini e per i comandi comuni.
 
@@ -180,18 +185,36 @@ Dalla radice del repository:
 make install  # uv sync --locked e npm ci per il frontend
 make check    # compatibilità delle dipendenze Python e controllo dei tipi frontend
 make build    # compilazione del frontend in frontend/dist
-make dev      # server di sviluppo del solo frontend
+make migrate  # applica le migrazioni alla MariaDB configurata in .env
+make backend  # FastAPI su http://127.0.0.1:8000
+# In un secondo terminale:
+make dev      # frontend; aprire l'indirizzo indicato da Vite
 ```
 
-Non è necessario attivare manualmente `.venv`: i comandi Python del progetto si eseguono tramite `uv run`. Per esempio, `uv run alembic --help` mostra i comandi disponibili, ma le migrazioni non sono ancora inizializzate. Il Makefile consente di sovrascrivere `UV` e `NPM` se gli eseguibili sono installati in percorsi differenti.
+Non è necessario attivare manualmente `.venv`: i comandi Python del progetto si eseguono tramite `uv run`. Il Makefile consente di sovrascrivere `UV` e `NPM` se gli eseguibili sono installati in percorsi differenti. Le migrazioni vengono eseguite esplicitamente, mai all'avvio del server.
+
+Vite inoltra `/graphql` al backend locale, senza richiedere configurazioni CORS. L'editor GraphQL è disponibile su `http://127.0.0.1:8000/graphql`. Per provare il flusso, creare un corso, creare una tabella, inserire uno studente e ricaricare la pagina: dopo la selezione del corso e della tabella i dati restano disponibili.
+
+### Contratto GraphQL e verifiche
+
+Il contratto è dichiarato in `gradient/schema.py` ed esportato in [schema.graphql](schema.graphql) con `make schema`. Le operazioni frontend sono in `frontend/src/api.ts`; i test ne verificano la validità rispetto allo schema e controllano che il file esportato sia aggiornato.
+
+Le operazioni disponibili sono `courses`, `courseTables`, `studentRows`, `createCourse`, `createTable` e `addStudent`. Le mutazioni restituiscono errori di validazione con campo, codice e messaggio; gli ID inesistenti e le matricole duplicate vengono segnalati senza salvare righe parziali. Gli anni accademici accettano `2026/27` o `2026/2027` e vengono memorizzati nella forma completa. Matricole vuote diventano valori mancanti, mentre gli zeri iniziali vengono conservati.
+
+```bash
+make test     # contratto, configurazione e validazione, senza database
+make test-db  # integrazione sulla MariaDB configurata, dopo make migrate
+```
+
+I test di integrazione creano corsi temporanei e rimuovono soltanto i propri dati al termine. Verificano persistenza tra istanze dell'applicazione, unicità delle matricole per tabella, più matricole mancanti e indipendenza dei nomi tra tabelle. Non creano né avviano database. Utilizzare un database di sviluppo.
 
 Gli ambienti locali, `node_modules`, i risultati delle compilazioni e i file `.env` sono esclusi dal versionamento. I lockfile vanno invece conservati in Git.
 
 ### MariaDB nello sviluppo locale
 
-Il backend dovrà potersi collegare a una MariaDB esterna, anche gestita tramite un Compose condiviso con altri progetti. Il repository non impone di avviare un proprio database: `make install`, `make check`, `make build` e `make dev` non avviano container.
+Il backend si collega a una MariaDB esterna, anche gestita tramite un Compose condiviso con altri progetti. Il repository non impone di avviare un proprio database: i comandi Make non avviano container.
 
-Il file [.env.example](.env.example) descrive i parametri di connessione proposti. La lettura di questi parametri da parte del backend non è ancora implementata. Per usare un'istanza esistente, creare un database e un utente dedicati a Gradient e configurare in `.env` host, porta, nome del database e credenziali. Non serve modificare o usare il Compose di esempio.
+Il file [.env.example](.env.example) descrive i parametri di connessione. Il backend e Alembic leggono `.env` dalla radice del repository; le variabili d'ambiente hanno precedenza. Dopo una modifica a `.env`, riavviare il backend. Per usare un'istanza esistente, creare un database e un utente dedicati a Gradient e configurare in `.env` host, porta, nome del database e credenziali. Non serve modificare o usare il Compose di esempio. Il backend usa il driver asincrono `asyncmy` e non richiede la password root.
 
 Per chi non ha già un database, [compose.example.yaml](compose.example.yaml) fornisce un esempio facoltativo con MariaDB 11.8, database e utente applicativo dedicati, volume persistente e controllo di disponibilità:
 
@@ -200,7 +223,7 @@ cp .env.example .env
 docker compose -p gradient-dev -f compose.example.yaml up -d --wait
 ```
 
-Le password nel file di esempio sono soltanto per lo sviluppo locale. Il database è pubblicato su `127.0.0.1:3306` per l'applicazione eseguita sull'host. Se questa porta è occupata, cambiare `DB_PORT` nel file `.env`. `DB_HOST` descrive l'indirizzo raggiunto dal futuro backend: non cambia il binding del container, che resta limitato a localhost. Se il backend verrà eseguito in un container, host e porta andranno adattati alla rete Docker.
+Le password nel file di esempio sono soltanto per lo sviluppo locale. Il database è pubblicato su `127.0.0.1:3306` per l'applicazione eseguita sull'host. Se questa porta è occupata, cambiare `DB_PORT` nel file `.env`. `DB_HOST` descrive l'indirizzo raggiunto dal backend: non cambia il binding del container, che resta limitato a localhost. Se il backend verrà eseguito in un container, host e porta andranno adattati alla rete Docker.
 
 È possibile copiare il servizio e la relativa dichiarazione del volume nel proprio Compose condiviso, adattando variabili e porta. I valori `MARIADB_*` creano database e utenti soltanto quando il volume è inizialmente vuoto: modificare `.env` in seguito non cambia automaticamente le credenziali o il database esistenti.
 

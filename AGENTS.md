@@ -2,23 +2,31 @@
 
 ## Stato e documentazione
 
-Il progetto è nella fase di definizione dei requisiti. Leggere [README.md](README.md) prima di proporre modifiche: contiene la descrizione funzionale e le decisioni concordate con il committente.
+Il progetto è nella fase di definizione dei requisiti e sviluppo del primo prototipo. Leggere [README.md](README.md) prima di proporre modifiche: contiene la descrizione funzionale e le decisioni concordate con il committente.
 
 Mantenere la documentazione in italiano. Distinguere le decisioni accettate dalle proposte e dalle questioni aperte. Aggiornare la documentazione quando vengono concordate nuove decisioni, senza presentare una funzionalità prevista come già implementata.
 
+## Stato del prototipo e ripresa del lavoro
+
+È presente il codice del primo flusso: configurazione MariaDB da `.env`, modelli e migrazione iniziale per corsi, tabelle e righe studente, API GraphQL di creazione e lettura e interfaccia React. Il contratto esportato è in `schema.graphql`. Non sono ancora implementati autenticazione, importazione CSV, colonne personalizzabili, voti, formule o collegamenti tra tabelle.
+
+Alla ricognizione del 6 novembre 2026, le ultime verifiche riuscite erano quattro test senza database, controllo dei tipi frontend, compatibilità delle dipendenze e build frontend. Non considerare ancora verificato il flusso completo: l'applicazione della migrazione e i test di integrazione MariaDB non sono stati completati con successo. I precedenti tentativi erano stati ostacolati dalla configurazione locale, anche perché sulla porta 3306 rispondeva un container MySQL. L'utente ha poi comunicato di aver fermato MySQL e avviato MariaDB con la porta pubblicata; occorre verificare nuovamente lo stato effettivo senza assumere che i servizi siano ancora avviati.
+
+Il prossimo lavoro funzionale è applicare la migrazione con `make migrate`, eseguire `make test-db` e verificare nel browser creazione e rilettura dei dati dopo un ricaricamento. Riavviare il backend dopo modifiche a `.env` o alle dipendenze. Non cancellare volumi né alterare utenti del database per risolvere problemi di connessione senza una richiesta specifica.
+
 ## Scelte tecniche e aspetti ancora aperti
 
-Le scelte concordate sono MariaDB per il database, Python per il backend, SQLAlchemy per i modelli e l'accesso al database, Alembic per le migrazioni, GraphQL con Strawberry per l'API e React con Vite per il frontend. Il contratto client/server esplicito è una motivazione centrale della scelta di GraphQL. Il framework web, le altre librerie, il provider di autenticazione e la distribuzione sono ancora da confermare. Non trattare ulteriori suggerimenti come decisioni approvate. Non introdurre dipendenze, infrastruttura o un'implementazione sulla base di questo documento: seguire la richiesta corrente dell'utente.
+Le scelte concordate sono MariaDB per il database, Python con FastAPI e Uvicorn per il backend, SQLAlchemy per i modelli e l'accesso al database, Alembic per le migrazioni, GraphQL con Strawberry per l'API e React con Vite per il frontend. Il contratto client/server esplicito è una motivazione centrale della scelta di GraphQL. Le altre librerie, il provider di autenticazione e la distribuzione sono ancora da confermare. Non trattare ulteriori suggerimenti come decisioni approvate. Seguire la richiesta corrente dell'utente per l'implementazione.
 
 La rappresentazione dei dati descritta nel README è logica e non impone tipi o strutture specifici di un database.
 
-Usare uv per dipendenze e ambiente Python, npm per il frontend, un Makefile per i comandi comuni e Docker per l'immagine di deploy. L'utente ha autorizzato la preparazione degli strumenti di base; framework web e funzionalità applicative restano da definire.
+Usare uv per dipendenze e ambiente Python, npm per il frontend, un Makefile per i comandi comuni e Docker per l'immagine di deploy. L'utente ha autorizzato il primo flusso con connessione MariaDB, migrazione, creazione e lettura di corsi, tabelle e righe studente tramite GraphQL e interfaccia React.
 
-La base usa Python 3.14 e TypeScript per il frontend. Versionare `uv.lock` e `frontend/package-lock.json`; non versionare `.venv`, `node_modules`, output di build o segreti. Usare `make check` e `make build` per verificare la base; questi comandi non verificano un backend HTTP o un database, che non sono ancora configurati.
+La base usa Python 3.14 e TypeScript per il frontend. Versionare `uv.lock` e `frontend/package-lock.json`; non versionare `.venv`, `node_modules`, output di build o segreti. Usare `make check`, `make build` e `make test`; `make test-db` verifica separatamente MariaDB e richiede `make migrate`. I test database puliscono soltanto i propri dati temporanei. Esportare il contratto con `make schema` dopo modifiche GraphQL; i test verificano anche le operazioni frontend. Conservare sessioni separate per operazione asincrona, senza condividere un'AsyncSession tra resolver concorrenti.
 
 L'utilizzo previsto è ridotto, con pochissimi utenti. Contenere il consumo di RAM sul server è un obiettivo progettuale da considerare nelle proposte tecniche.
 
-I file di esempio e la documentazione devono rivolgersi a uno sviluppatore generico, usando valori convenzionali come la porta MariaDB 3306. Non adattare i valori predefiniti all'ambiente personale del committente; eventuali configurazioni particolari si gestiscono localmente. Il database di sviluppo può essere gestito esternamente. `compose.example.yaml` è facoltativo; non avviare automaticamente database dai normali comandi di sviluppo. `.env.example` documenta i parametri proposti, ma la configurazione del backend non è ancora implementata. Non modificare configurazioni esterne al repository senza una richiesta specifica.
+I file di esempio e la documentazione devono rivolgersi a uno sviluppatore generico, usando valori convenzionali come la porta MariaDB 3306. Non adattare i valori predefiniti all'ambiente personale del committente; eventuali configurazioni particolari si gestiscono localmente. Il database di sviluppo può essere gestito esternamente. `compose.example.yaml` è facoltativo; non avviare automaticamente database dai comandi Make. Il backend e Alembic leggono i parametri documentati in `.env.example` tramite pydantic-settings, con precedenza alle variabili d'ambiente. Non mostrare credenziali o modificare configurazioni esterne al repository senza una richiesta specifica. Non applicare migrazioni automaticamente all'avvio del backend.
 
 ## Vincoli funzionali da preservare
 

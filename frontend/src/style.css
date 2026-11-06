@@ -1,0 +1,37 @@
+:root { font-family: system-ui, sans-serif; color: #172c35; background: #f2f5f4; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.app { max-width: 1160px; margin: auto; padding: 32px; }
+header, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+header { margin-bottom: 24px; }
+h1 { margin: 0; font-size: 34px; letter-spacing: -1px; }
+h2 { margin: 0 0 8px; font-size: 21px; }
+p { color: #536770; margin: 0 0 20px; }
+.eyebrow { font-size: 11px; letter-spacing: 2px; margin-bottom: 6px; font-weight: 700; }
+.badge { background: #e1ebe8; color: #285d4f; padding: 8px 12px; border-radius: 20px; font-size: 12px; }
+.setup { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+section { padding: 26px; background: white; border: 1px solid #dbe3e0; border-radius: 12px; }
+label { display: flex; flex-direction: column; gap: 7px; font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+input, select, button { font: inherit; border-radius: 6px; }
+input, select { padding: 11px; background: white; border: 1px solid #b8c8c2; width: 100%; min-width: 0; color: inherit; }
+input:focus, select:focus, button:focus-visible { outline: 3px solid #8ec9b6; outline-offset: 2px; }
+button { cursor: pointer; padding: 11px 16px; border: 1px solid transparent; background: #21634f; color: white; font-weight: 600; }
+button:hover { background: #164b3c; }
+button:disabled, fieldset:disabled button { opacity: .5; cursor: default; }
+fieldset { border: 0; padding: 0; margin: 24px 0 0; min-width: 0; }
+legend { padding: 0; font-weight: 650; font-size: 14px; margin-bottom: 14px; }
+.students { margin-top: 24px; }
+.section-heading > span { color: #536770; font-size: 13px; white-space: nowrap; }
+.student-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; align-items: end; gap: 12px; }
+.student-form label { margin: 0; position: relative; }
+.student-form small { position: absolute; right: 0; font-weight: 400; color: #536770; }
+.table-scroll { overflow-x: auto; margin-top: 24px; }
+table { border-collapse: collapse; width: 100%; text-align: left; font-size: 14px; }
+th { font-size: 12px; background: #f3f6f5; }
+td, th { padding: 13px 15px; border-bottom: 1px solid #e4eae7; }
+.empty { padding: 36px 15px; text-align: center; color: #536770; }
+.muted { color: #71817d; font-style: italic; }
+.notice { min-height: 22px; margin-bottom: 12px; color: #21634f; font-size: 14px; }
+.error { padding: 15px; margin-bottom: 12px; background: #fff0ec; border: 1px solid #edc5b8; border-radius: 8px; }
+.error button { margin-left: 12px; padding: 5px 10px; }
+@media (max-width: 780px) { .app { padding: 18px; } .setup { grid-template-columns: 1fr; } .student-form { grid-template-columns: 1fr; } section { padding: 20px; } }

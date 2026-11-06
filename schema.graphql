@@ -1,0 +1,69 @@
+input AddStudentInput {
+  tableId: ID!
+  matricola: String = null
+  firstName: String! = ""
+  lastName: String! = ""
+}
+
+type Course {
+  id: ID!
+  name: String!
+  academicYear: String!
+}
+
+type CourseResult {
+  course: Course
+  errors: [FieldError!]!
+}
+
+type CourseTable {
+  id: ID!
+  courseId: ID!
+  name: String!
+}
+
+input CreateCourseInput {
+  name: String!
+  academicYear: String!
+}
+
+input CreateTableInput {
+  courseId: ID!
+  name: String!
+}
+
+type FieldError {
+  field: String!
+  code: String!
+  message: String!
+}
+
+type Mutation {
+  createCourse(input: CreateCourseInput!): CourseResult!
+  createTable(input: CreateTableInput!): TableResult!
+  addStudent(input: AddStudentInput!): StudentResult!
+}
+
+type Query {
+  courses: [Course!]!
+  courseTables(courseId: ID!): [CourseTable!]!
+  studentRows(tableId: ID!): [StudentRow!]!
+}
+
+type StudentResult {
+  row: StudentRow
+  errors: [FieldError!]!
+}
+
+type StudentRow {
+  id: ID!
+  tableId: ID!
+  matricola: String
+  firstName: String!
+  lastName: String!
+}
+
+type TableResult {
+  table: CourseTable
+  errors: [FieldError!]!
+}
