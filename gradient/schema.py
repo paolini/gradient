@@ -1,11 +1,35 @@
+import logging
+from datetime import date as Date
 from pathlib import Path
 
 import strawberry
 from graphql import GraphQLError
 from sqlalchemy.exc import SQLAlchemyError
-from strawberry.types import Info
+from strawberry.types import ExecutionContext, Info
 
+from gradient.database import database_error_details
 from gradient.services import InputError
+
+logger = logging.getLogger(__name__)
+
+
+class HandledDatabaseError(GraphQLError):
+    """Errore operativo già diagnosticato e registrato dal backend."""
+
+
+class GradientSchema(strawberry.Schema):
+    def process_errors(
+        self,
+        errors: list[GraphQLError],
+        execution_context: ExecutionContext | None = None,
+    ) -> None:
+        unexpected = [
+            error for error in errors
+            if not isinstance(error, HandledDatabaseError)
+            and not isinstance(error.original_error, HandledDatabaseError)
+        ]
+        if unexpected:
+            super().process_errors(unexpected, execution_context)
 
 
 @strawberry.type
@@ -13,6 +37,7 @@ class Course:
     id: strawberry.ID
     name: str
     academic_year: str
+    degree_program: str | None
 
 
 @strawberry.type
@@ -20,6 +45,8 @@ class CourseTable:
     id: strawberry.ID
     course_id: strawberry.ID
     name: str
+    date: Date | None
+    location: str | None
 
 
 @strawberry.type
@@ -32,11 +59,11 @@ class StudentRow:
 
 
 def course_type(row):
-    return Course(id=strawberry.ID(row.id), name=row.name, academic_year=row.academic_year)
+    return Course(id=strawberry.ID(row.id), name=row.name, academic_year=row.academic_year, degree_program=row.degree_program)
 
 
 def table_type(row):
-    return CourseTable(id=strawberry.ID(row.id), course_id=strawberry.ID(row.course_id), name=row.name)
+    return CourseTable(id=strawberry.ID(row.id), course_id=strawberry.ID(row.course_id), name=row.name, date=row.date, location=row.location)
 
 
 def student_type(row):
@@ -72,12 +99,15 @@ class StudentResult:
 class CreateCourseInput:
     name: str
     academic_year: str
+    degree_program: str | None = None
 
 
 @strawberry.input
 class CreateTableInput:
     course_id: strawberry.ID
     name: str
+    date: Date | None = None
+    location: str | None = None
 
 
 @strawberry.input
@@ -93,8 +123,11 @@ async def execute(operation):
         return await operation
     except InputError as error:
         raise GraphQLError(str(error), extensions={"code": error.code, "field": error.field}) from None
-    except SQLAlchemyError:
-        raise GraphQLError("Database non disponibile o non inizializzato. Verificare la connessione e le migrazioni.", extensions={"code": "DATABASE_ERROR"}) from None
+    except SQLAlchemyError as error:
+        code, message = database_error_details(error)
+        logger.error("%s [%s]", message, code)
+        error_type = HandledDatabaseError if code != "DATABASE_ERROR" else GraphQLError
+        raise error_type("Database non disponibile o non inizializzato. Verificare la connessione e le migrazioni.", extensions={"code": "DATABASE_ERROR"}) from None
 
 
 async def mutate(operation, result_type, field, convert):
@@ -103,8 +136,11 @@ async def mutate(operation, result_type, field, convert):
         return result_type(**{field: convert(row)})
     except InputError as error:
         return result_type(errors=[FieldError(field=error.field, code=error.code, message=str(error))])
-    except SQLAlchemyError:
-        raise GraphQLError("Impossibile salvare i dati. Verificare la connessione e le migrazioni.", extensions={"code": "DATABASE_ERROR"}) from None
+    except SQLAlchemyError as error:
+        code, message = database_error_details(error)
+        logger.error("%s [%s]", message, code)
+        error_type = HandledDatabaseError if code != "DATABASE_ERROR" else GraphQLError
+        raise error_type("Impossibile salvare i dati. Verificare la connessione e le migrazioni.", extensions={"code": "DATABASE_ERROR"}) from None
 
 
 @strawberry.type
@@ -126,18 +162,18 @@ class Query:
 class Mutation:
     @strawberry.mutation
     async def create_course(self, info: Info, input: CreateCourseInput) -> CourseResult:
-        return await mutate(info.context["store"].create_course(input.name, input.academic_year), CourseResult, "course", course_type)
+        return await mutate(info.context["store"].create_course(input.name, input.academic_year, input.degree_program), CourseResult, "course", course_type)
 
     @strawberry.mutation
     async def create_table(self, info: Info, input: CreateTableInput) -> TableResult:
-        return await mutate(info.context["store"].create_table(str(input.course_id), input.name), TableResult, "table", table_type)
+        return await mutate(info.context["store"].create_table(str(input.course_id), input.name, input.date, input.location), TableResult, "table", table_type)
 
     @strawberry.mutation
     async def add_student(self, info: Info, input: AddStudentInput) -> StudentResult:
         return await mutate(info.context["store"].add_student(str(input.table_id), input.matricola, input.first_name, input.last_name), StudentResult, "row", student_type)
 
 
-schema = strawberry.Schema(query=Query, mutation=Mutation)
+schema = GradientSchema(query=Query, mutation=Mutation)
 
 if __name__ == "__main__":
     Path("schema.graphql").write_text(schema.as_str() + "\n", encoding="utf-8")

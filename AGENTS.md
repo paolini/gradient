@@ -6,6 +6,8 @@ Il progetto è nella fase di definizione dei requisiti e sviluppo del primo prot
 
 Mantenere la documentazione in italiano. Distinguere le decisioni accettate dalle proposte e dalle questioni aperte. Aggiornare la documentazione quando vengono concordate nuove decisioni, senza presentare una funzionalità prevista come già implementata.
 
+Per gli errori del database mantenere un messaggio generico al client; scrivere la diagnosi specifica nei log del backend, senza credenziali o dettagli grezzi del driver. Intercettare gli errori operativi riconosciuti e non duplicarne il messaggio con traceback automatici di Strawberry. Conservare invece i traceback per errori imprevisti o non classificati; non disabilitare globalmente il logging degli errori.
+
 ## Stato del prototipo e ripresa del lavoro
 
 È presente il codice del primo flusso: configurazione MariaDB da `.env`, modelli e migrazione iniziale per corsi, tabelle e righe studente, API GraphQL di creazione e lettura e interfaccia React. Il contratto esportato è in `schema.graphql`. Non sono ancora implementati autenticazione, importazione CSV, colonne personalizzabili, voti, formule o collegamenti tra tabelle.
@@ -31,6 +33,7 @@ I file di esempio e la documentazione devono rivolgersi a uno sviluppatore gener
 ## Vincoli funzionali da preservare
 
 - Modellare ogni corso come una specifica edizione dell'insegnamento. Distinguere gli utenti che accedono dagli studenti valutati, che possono non avere un account.
+- Il corso ha un campo testuale facoltativo per il corso di laurea. Le tabelle hanno data facoltativa senza orario e luogo facoltativo; non richiederli per i record esistenti. Questi campi sono aggiunti dalla migrazione `0002`.
 - Consentire tabelle del corso anche senza una prova associata. Ogni riga rappresenta uno studente del corso; collegare le righe tra tabelle tramite identità, non posizione.
 - Dare a ogni riga un identificatore interno stabile. La matricola può essere temporaneamente mancante ed è la chiave di collegamento tra tabelle, non la chiave primaria tecnica della riga. Consentire più righe senza matricola, ma non matricole duplicate nella stessa tabella. Trattare una nuova matricola da reimmatricolazione come uno studente distinto; non unire automaticamente righe tramite nome e cognome.
 - Conservare nome e cognome come colonne indipendenti della singola tabella: la stessa matricola può avere dati anagrafici differenti tra prove. Non sincronizzarli automaticamente tra tabelle o corsi.

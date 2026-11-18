@@ -25,13 +25,15 @@ L'applicazione deve prevedere l'autenticazione OAuth per i docenti. Il provider 
 ## Entità e organizzazione dei dati
 
 - **Utente**: persona che accede all'applicazione.
-- **Corso**: una specifica edizione dell'insegnamento, per esempio Analisi 1 nell'anno accademico 2026/27; raccoglie studenti, tabelle e prove.
+- **Corso**: una specifica edizione dell'insegnamento, per esempio Analisi 1 nell'anno accademico 2026/27; raccoglie studenti, tabelle e prove. Comprende il corso di laurea come campo testuale facoltativo.
 - **Partecipazione al corso**: collega un utente a un corso con il relativo ruolo. I ruoli e i permessi restano da definire.
 - **Studente**: persona valutata, identificata dalla matricola; non richiede un account utente. Un eventuale collegamento a un account sarà discusso con l'accesso degli studenti.
 - **Tabella**: appartiene a un corso e contiene colonne configurabili; ogni riga rappresenta uno studente del corso. Tabelle diverse possono includere sottoinsiemi diversi di studenti. I collegamenti tra tabelle usano l'identità dello studente, non la posizione della riga.
 - **Prova**: informazioni specifiche di un compitino, scritto o orale, associate a una tabella.
 
 Si possono creare anche tabelle che non corrispondono a prove d'esame. Nella prima fase non sono previste tabelle con righe arbitrarie: una riga rappresenta sempre uno studente.
+
+Ogni tabella può avere una data facoltativa (senza orario) e un luogo facoltativo. I moduli di creazione permettono di inserirli e l'interfaccia li mostra per la tabella selezionata. I campi testuali aggiuntivi ammettono fino a 200 caratteri; vuoti o composti da soli spazi vengono memorizzati come mancanti. La migrazione `0002` aggiunge questi campi senza richiedere valori per i record esistenti; eseguire `make migrate` prima di usare il backend aggiornato.
 
 ### Identità degli studenti
 
@@ -200,6 +202,10 @@ Vite inoltra `/graphql` al backend locale, senza richiedere configurazioni CORS.
 Il contratto è dichiarato in `gradient/schema.py` ed esportato in [schema.graphql](schema.graphql) con `make schema`. Le operazioni frontend sono in `frontend/src/api.ts`; i test ne verificano la validità rispetto allo schema e controllano che il file esportato sia aggiornato.
 
 Le operazioni disponibili sono `courses`, `courseTables`, `studentRows`, `createCourse`, `createTable` e `addStudent`. Le mutazioni restituiscono errori di validazione con campo, codice e messaggio; gli ID inesistenti e le matricole duplicate vengono segnalati senza salvare righe parziali. Gli anni accademici accettano `2026/27` o `2026/2027` e vengono memorizzati nella forma completa. Matricole vuote diventano valori mancanti, mentre gli zeri iniziali vengono conservati.
+
+Le risposte GraphQL mantengono un messaggio generico e il codice `DATABASE_ERROR` per gli errori database. La diagnosi specifica viene scritta soltanto nei log del backend: servizio non raggiungibile, connessione interrotta, credenziali errate, permessi insufficienti, database inesistente o struttura da inizializzare o aggiornare. Se MariaDB non è raggiungibile, il log invita a verificare avvio, host e porta; `make migrate` viene suggerito quando mancano tabelle o colonne. Questi messaggi diagnostici non riportano credenziali o dettagli grezzi del driver.
+
+Gli errori operativi riconosciuti sono intercettati e producono un solo messaggio diagnostico, senza il traceback automatico di Strawberry. Gli errori imprevisti o non classificati mantengono il traceback per consentire il debug.
 
 ```bash
 make test     # contratto, configurazione e validazione, senza database

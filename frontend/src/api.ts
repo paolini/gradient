@@ -1,5 +1,5 @@
-export type Course = { id: string; name: string; academicYear: string };
-export type CourseTable = { id: string; courseId: string; name: string };
+export type Course = { id: string; name: string; academicYear: string; degreeProgram: string | null };
+export type CourseTable = { id: string; courseId: string; name: string; date: string | null; location: string | null };
 export type StudentRow = { id: string; tableId: string; matricola: string | null; firstName: string; lastName: string };
 type FieldError = { field: string; code: string; message: string };
 export type MutationResult<T> = T & { errors: FieldError[] };
@@ -23,11 +23,11 @@ export async function graphql<T>(query: string, variables: Record<string, unknow
 }
 
 export const operations = {
-  courses: 'query Courses { courses { id name academicYear } }',
-  tables: 'query Tables($courseId: ID!) { courseTables(courseId: $courseId) { id courseId name } }',
+  courses: 'query Courses { courses { id name academicYear degreeProgram } }',
+  tables: 'query Tables($courseId: ID!) { courseTables(courseId: $courseId) { id courseId name date location } }',
   rows: 'query Rows($tableId: ID!) { studentRows(tableId: $tableId) { id tableId matricola firstName lastName } }',
-  createCourse: 'mutation CreateCourse($input: CreateCourseInput!) { createCourse(input: $input) { course { id name academicYear } errors { field code message } } }',
-  createTable: 'mutation CreateTable($input: CreateTableInput!) { createTable(input: $input) { table { id courseId name } errors { field code message } } }',
+  createCourse: 'mutation CreateCourse($input: CreateCourseInput!) { createCourse(input: $input) { course { id name academicYear degreeProgram } errors { field code message } } }',
+  createTable: 'mutation CreateTable($input: CreateTableInput!) { createTable(input: $input) { table { id courseId name date location } errors { field code message } } }',
   addStudent: 'mutation AddStudent($input: AddStudentInput!) { addStudent(input: $input) { row { id tableId matricola firstName lastName } errors { field code message } } }',
 };
 

@@ -30,6 +30,11 @@ function defaultYear() {
   return `${year}/${year + 1}`;
 }
 
+function formatDate(value: string) {
+  const [year, month, day] = value.split('-');
+  return `${day}/${month}/${year}`;
+}
+
 export default function App() {
   const [revision, setRevision] = useState(0);
   const [courseId, setCourseId] = useState('');
@@ -38,8 +43,11 @@ export default function App() {
   const tables = useList<CourseTable>(operations.tables, 'courseTables', courseId, revision);
   const rows = useList<StudentRow>(operations.rows, 'studentRows', tableId, revision);
   const [courseName, setCourseName] = useState('');
+  const [degreeProgram, setDegreeProgram] = useState('');
   const [year, setYear] = useState(defaultYear);
   const [tableName, setTableName] = useState('');
+  const [tableDate, setTableDate] = useState('');
+  const [tableLocation, setTableLocation] = useState('');
   const [matricola, setMatricola] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -84,16 +92,17 @@ export default function App() {
           <h2>Corso</h2><p>Ogni corso rappresenta un anno accademico.</p>
           <label>Corso attivo<select value={courseId} disabled={pending || courses.loading} onChange={event => { setCourseId(event.target.value); setTableId(''); setNotice(''); }}>
             <option value="">{courses.loading ? 'Caricamento…' : 'Seleziona un corso'}</option>
-            {courses.items.map(course => <option key={course.id} value={course.id}>{course.name} · {course.academicYear}</option>)}
+            {courses.items.map(course => <option key={course.id} value={course.id}>{[course.name, course.degreeProgram, course.academicYear].filter(Boolean).join(' · ')}</option>)}
           </select></label>
           <form onSubmit={event => save(event, async () => {
-            const data = await graphql<{ createCourse: MutationResult<{ course: Course | null }> }>(operations.createCourse, { input: { name: courseName, academicYear: year } });
+            const data = await graphql<{ createCourse: MutationResult<{ course: Course | null }> }>(operations.createCourse, { input: { name: courseName, academicYear: year, degreeProgram: degreeProgram || null } });
             const result = requireSuccess(data.createCourse);
             if (!result.course) throw new Error('Corso non restituito dal server.');
-            setCourseId(result.course.id); setTableId(''); setCourseName('');
+            setCourseId(result.course.id); setTableId(''); setCourseName(''); setDegreeProgram('');
           })}>
             <fieldset disabled={pending}><legend>Nuovo corso</legend>
               <label>Nome del corso<input value={courseName} onChange={event => setCourseName(event.target.value)} maxLength={200} required placeholder="Analisi 1" /></label>
+              <label>Corso di laurea (facoltativo)<input value={degreeProgram} onChange={event => setDegreeProgram(event.target.value)} maxLength={200} placeholder="Matematica" /></label>
               <label>Anno accademico<input value={year} onChange={event => setYear(event.target.value)} required placeholder="2026/2027" /></label>
               <button>Crea corso</button>
             </fieldset>
@@ -103,23 +112,27 @@ export default function App() {
           <h2>Tabella</h2><p>Una prova o un elenco di studenti del corso.</p>
           <label>Tabella attiva<select value={tableId} disabled={pending || !courseId || tables.loading} onChange={event => { setTableId(event.target.value); setNotice(''); }}>
             <option value="">{tables.loading ? 'Caricamento…' : 'Seleziona una tabella'}</option>
-            {tables.items.map(table => <option key={table.id} value={table.id}>{table.name}</option>)}
+            {tables.items.map(table => <option key={table.id} value={table.id}>{[table.name, table.date && formatDate(table.date), table.location].filter(Boolean).join(' · ')}</option>)}
           </select></label>
           <form onSubmit={event => save(event, async () => {
-            const data = await graphql<{ createTable: MutationResult<{ table: CourseTable | null }> }>(operations.createTable, { input: { courseId, name: tableName } });
+            const data = await graphql<{ createTable: MutationResult<{ table: CourseTable | null }> }>(operations.createTable, { input: { courseId, name: tableName, date: tableDate || null, location: tableLocation || null } });
             const result = requireSuccess(data.createTable);
             if (!result.table) throw new Error('Tabella non restituita dal server.');
-            setTableId(result.table.id); setTableName('');
+            setTableId(result.table.id); setTableName(''); setTableDate(''); setTableLocation('');
           })}>
             <fieldset disabled={pending || !courseId}><legend>Nuova tabella</legend>
               <label>Nome della tabella<input value={tableName} onChange={event => setTableName(event.target.value)} required maxLength={200} placeholder="Primo compitino" /></label>
+              <label>Data (facoltativa)<input type="date" value={tableDate} onChange={event => setTableDate(event.target.value)} min="1000-01-01" max="9999-12-31" /></label>
+              <label>Luogo (facoltativo)<input value={tableLocation} onChange={event => setTableLocation(event.target.value)} maxLength={200} placeholder="Aula A" /></label>
               <button>Crea tabella</button>
             </fieldset>
           </form>
         </section>
       </div>
       <section className="students">
-        <div className="section-heading"><div><h2>{selectedTable?.name || 'Studenti'}</h2><p>{selectedCourse ? `${selectedCourse.name} · ${selectedCourse.academicYear}` : 'Crea o seleziona un corso e una tabella.'}</p></div><span>{rows.items.length} studenti</span></div>
+        <div className="section-heading"><div><h2>{selectedTable?.name || 'Studenti'}</h2><p>{selectedCourse ? [selectedCourse.name, selectedCourse.degreeProgram, selectedCourse.academicYear].filter(Boolean).join(' · ') : 'Crea o seleziona un corso e una tabella.'}</p>
+          {selectedTable && (selectedTable.date || selectedTable.location) && <p>{[selectedTable.date && formatDate(selectedTable.date), selectedTable.location].filter(Boolean).join(' · ')}</p>}
+        </div><span>{rows.items.length} studenti</span></div>
         <form onSubmit={event => save(event, async () => {
           const data = await graphql<{ addStudent: MutationResult<{ row: StudentRow | null }> }>(operations.addStudent, { input: { tableId, matricola: matricola || null, firstName, lastName } });
           requireSuccess(data.addStudent);

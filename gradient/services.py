@@ -1,4 +1,5 @@
 import re
+from datetime import date as DateValue
 from uuid import UUID
 
 from sqlalchemy import select
@@ -56,7 +57,7 @@ class Store:
         if await session.get(model, entity_id) is None:
             raise InputError(field, "Elemento non trovato.", "NOT_FOUND")
 
-    async def create_course(self, name: str, academic_year: str):
+    async def create_course(self, name: str, academic_year: str, degree_program: str | None = None):
         name = text(name, "name")
         year = academic_year.strip()
         match = re.fullmatch(r"([0-9]{4})/([0-9]{2}|[0-9]{4})", year)
@@ -65,14 +66,20 @@ class Store:
         start = int(match[1])
         if start < 1000 or start >= 9999 or match[2] not in (str(start + 1), str(start + 1)[-2:]):
             raise InputError("academicYear", "L'anno accademico deve comprendere due anni consecutivi.")
-        course = Course(name=name, academic_year=f"{start}/{start + 1}")
+        course = Course(
+            name=name, academic_year=f"{start}/{start + 1}",
+            degree_program=text(degree_program or "", "degreeProgram", required=False) or None,
+        )
         async with self.database.sessions.begin() as session:
             session.add(course)
         return course
 
-    async def create_table(self, course_id: str, name: str):
+    async def create_table(self, course_id: str, name: str, date: DateValue | None = None, location: str | None = None):
         course_id = identifier(course_id, "courseId")
-        table = CourseTable(course_id=course_id, name=text(name, "name"))
+        table = CourseTable(
+            course_id=course_id, name=text(name, "name"), date=date,
+            location=text(location or "", "location", required=False) or None,
+        )
         async with self.database.sessions.begin() as session:
             await self.require(session, Course, course_id, "courseId")
             session.add(table)

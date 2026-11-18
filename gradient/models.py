@@ -1,6 +1,7 @@
+from datetime import date as DateValue
 from uuid import uuid4
 
-from sqlalchemy import ForeignKey, MetaData, String, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, MetaData, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -23,6 +24,7 @@ class Course(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(200))
     academic_year: Mapped[str] = mapped_column(String(9))
+    degree_program: Mapped[str | None] = mapped_column(String(200))
 
 
 class CourseTable(Base):
@@ -31,6 +33,9 @@ class CourseTable(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), index=True)
     name: Mapped[str] = mapped_column(String(200))
+
+    date: Mapped[DateValue | None] = mapped_column(Date)
+    location: Mapped[str | None] = mapped_column(String(200))
 
 
 class StudentRow(Base):

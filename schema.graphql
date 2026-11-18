@@ -9,6 +9,7 @@ type Course {
   id: ID!
   name: String!
   academicYear: String!
+  degreeProgram: String
 }
 
 type CourseResult {
@@ -20,17 +21,25 @@ type CourseTable {
   id: ID!
   courseId: ID!
   name: String!
+  date: Date
+  location: String
 }
 
 input CreateCourseInput {
   name: String!
   academicYear: String!
+  degreeProgram: String = null
 }
 
 input CreateTableInput {
   courseId: ID!
   name: String!
+  date: Date = null
+  location: String = null
 }
+
+"""Date (isoformat)"""
+scalar Date
 
 type FieldError {
   field: String!
