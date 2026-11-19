@@ -49,9 +49,17 @@ Non unire automaticamente studenti con matricole differenti sulla base di nome e
 
 Nel workflow descritto per UniPi, gli studenti si registrano agli esami sul sito di ateneo e il docente scarica l'elenco degli iscritti in formato CSV.
 
-L'applicazione deve consentire l'upload di questo CSV. Tipicamente l'importazione coincide con la creazione della tabella della prova e ne popola le righe con gli studenti registrati. Deve essere possibile aggiungere o rimuovere studenti dalla tabella anche in seguito.
+L'importazione iniziale è implementata nel riquadro **Nuova tabella da CSV**. Selezionare un corso, caricare il file e controllare l'anteprima. L'applicazione riconosce le intestazioni UniPi anche dopo le righe introduttive; le associazioni delle colonne possono essere modificate prima del salvataggio. È possibile indicare nome, data e luogo della nuova tabella.
 
-L'identificazione degli studenti importati avviene tramite matricola. Il formato del CSV, la gestione dei duplicati, delle importazioni successive e dei conflitti anagrafici restano da definire. La rimozione da una tabella non implica la cancellazione dello studente dalle altre tabelle o dal corso.
+Vengono importati matricola, nome, cognome, email e i due flag indipendenti DSA/DIS. Le altre colonne e le informazioni introduttive non vengono memorizzate; le righe non vengono filtrate automaticamente in base alla colonna «Cancellazioni». DSA e DIS possono leggere colonne distinte, «Documentazione studente» o «Note di sistema»: l'associazione automatica cerca le sigle nelle due colonne e privilegia eventuali colonne DSA/DIS esplicite. Sono riconosciuti vuoto/no/off/0, sì/x/on/1 e le sigle DSA/DIS, anche combinate. Valori non riconosciuti vengono segnalati, senza indovinarne il significato. Delle note associate ai flag viene conservato soltanto il valore booleano, non il testo.
+
+Le matricole restano testuali, con gli zeri iniziali. Quelle mancanti producono avvisi ma sono ammesse; duplicati, flag non riconosciuti, lunghezze eccessive e righe con un numero di celle errato bloccano il salvataggio. Gli errori indicano la riga del file. Il server ricontrolla tutto il CSV al momento dell'importazione e salva tabella e studenti in una sola transazione: un errore annulla l'intera creazione.
+
+Sono supportati UTF-8 (anche con BOM) e Windows-1252, separatori punto e virgola, virgola, tab e pipe, la direttiva iniziale `sep=`, celle tra virgolette e su più righe. Il limite iniziale è di 2 MiB, 5000 studenti e 100 colonne. L'anteprima mostra al massimo 100 studenti, ma valida tutte le righe.
+
+Il [CSV di esempio](examples/unipi-iscritti.csv), con 14 studenti fittizi, è stato controllato e approvato dal committente per il repository e i test. L'originale non è incluso. Il file caricato viene letto in memoria e non viene conservato né scritto nei log. L'anteprima non richiede accesso al database.
+
+L'importazione crea sempre una nuova tabella: reimportazioni e aggiornamenti di tabelle esistenti restano da progettare. È già possibile aggiungere manualmente studenti; rimozioni e modifica dei flag dall'interfaccia restano da implementare. La futura rimozione da una tabella non dovrà cancellare i dati nelle altre tabelle.
 
 ## Tabelle delle prove
 
@@ -153,7 +161,7 @@ Restano da discutere in particolare:
 - stack applicativo, librerie e schema del database MariaDB;
 - provider di autenticazione e autorizzazioni sui corsi;
 - eventuale accesso degli studenti;
-- formato CSV e regole per duplicati, reimportazioni e aggiornamento dei dati anagrafici;
+- reimportazioni e aggiornamento dei dati anagrafici nelle tabelle esistenti;
 - configurazione delle colonne e delle informazioni delle prove;
 - formule, precisione dei calcoli e gestione dei valori mancanti;
 - correzione delle risposte multiple e varianti dei compiti;
@@ -167,9 +175,9 @@ Questo file descrive il progetto e le decisioni funzionali concordate. Le istruz
 
 ### Ambiente di sviluppo
 
-Il primo flusso applicativo consente di creare corsi, tabelle e righe studente e consultarli tramite GraphQL e interfaccia React. Le righe hanno ID stabili, matricole facoltative e nome/cognome locali alla tabella. Sono presenti configurazione MariaDB, prima migrazione Alembic e test di integrazione. Colonne custom, voti, importazione CSV e autenticazione non sono ancora implementati: questa versione è destinata allo sviluppo locale.
+Il primo flusso applicativo consente di creare corsi, tabelle e righe studente e consultarli tramite GraphQL e interfaccia React. Le righe hanno ID stabili, matricole facoltative e nome/cognome locali alla tabella. L'importazione iniziale CSV è implementata con anteprima, associazione delle colonne e salvataggio atomico. La migrazione `0003` aggiunge email e flag DSA/DIS alle righe esistenti, inizialmente vuoti/off. Colonne custom, voti, formule e autenticazione non sono ancora implementati: questa versione è destinata allo sviluppo locale.
 
-Stato delle verifiche al 6 novembre 2026: nell'ultima sessione sono riusciti quattro test senza database, controllo dei tipi, compatibilità delle dipendenze e build frontend. La migrazione e i test di integrazione MariaDB restano da completare; il flusso completo di salvataggio e rilettura non è ancora verificato.
+Stato delle verifiche al 19 novembre 2026: passati 50 test senza database e 6 test su MariaDB, controllo dei tipi, compatibilità delle dipendenze e build frontend. La migrazione fino a `0003` è stata applicata al database locale e `alembic check` non rileva differenze rispetto ai modelli. Verificati nel browser caricamento, anteprima, importazione dei 14 studenti fittizi e permanenza dei dati dopo il ricaricamento.
 
 Le dipendenze Python sono in `pyproject.toml` e `uv.lock`; il frontend React/Vite è in `frontend/`, con il proprio lockfile npm. I modelli e il backend sono nel pacchetto `gradient/`, le migrazioni in `migrations/`. Il pool del backend ha un massimo di due connessioni per processo.
 
@@ -201,7 +209,7 @@ Vite inoltra `/graphql` al backend locale, senza richiedere configurazioni CORS.
 
 Il contratto è dichiarato in `gradient/schema.py` ed esportato in [schema.graphql](schema.graphql) con `make schema`. Le operazioni frontend sono in `frontend/src/api.ts`; i test ne verificano la validità rispetto allo schema e controllano che il file esportato sia aggiornato.
 
-Le operazioni disponibili sono `courses`, `courseTables`, `studentRows`, `createCourse`, `createTable` e `addStudent`. Le mutazioni restituiscono errori di validazione con campo, codice e messaggio; gli ID inesistenti e le matricole duplicate vengono segnalati senza salvare righe parziali. Gli anni accademici accettano `2026/27` o `2026/2027` e vengono memorizzati nella forma completa. Matricole vuote diventano valori mancanti, mentre gli zeri iniziali vengono conservati.
+Le operazioni disponibili sono `courses`, `courseTables`, `studentRows`, `createCourse`, `createTable`, `addStudent`, `previewCsv` e `importCsvTable`. Le mutazioni restituiscono errori di validazione con campo, codice e messaggio; l'importazione indica anche la riga del CSV. Gli ID inesistenti e le matricole duplicate vengono segnalati senza salvare righe parziali. Gli anni accademici accettano `2026/27` o `2026/2027` e vengono memorizzati nella forma completa. Matricole vuote diventano valori mancanti, mentre gli zeri iniziali vengono conservati.
 
 Le risposte GraphQL mantengono un messaggio generico e il codice `DATABASE_ERROR` per gli errori database. La diagnosi specifica viene scritta soltanto nei log del backend: servizio non raggiungibile, connessione interrotta, credenziali errate, permessi insufficienti, database inesistente o struttura da inizializzare o aggiornare. Se MariaDB non è raggiungibile, il log invita a verificare avvio, host e porta; `make migrate` viene suggerito quando mancano tabelle o colonne. Questi messaggi diagnostici non riportano credenziali o dettagli grezzi del driver.
 

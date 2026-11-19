@@ -1,9 +1,12 @@
 import os
+import base64
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, event, select
+from sqlalchemy.exc import OperationalError
 
 from gradient.app import create_app
 from gradient.models import Course, CourseTable, StudentRow
@@ -118,3 +121,46 @@ def test_course_and_table_details_survive_reload(database):
         assert next(item for item in tables if item["id"] == empty_table_id) == {
             "id": empty_table_id, "date": None, "location": None,
         }
+
+
+IMPORT = '''mutation($input: ImportCsvInput!) {
+  importCsvTable(input: $input) { table { id } importedCount errors { row field message } }
+}'''
+
+
+def test_import_reviewed_csv_persists_all_students(database):
+    client, _ = database
+    course_id = course(database)["id"]
+    content = base64.b64encode(Path("examples/unipi-iscritti.csv").read_bytes()).decode("ascii")
+    result = query(client, IMPORT, input={
+        "table": {"courseId": course_id, "name": "Import CSV"},
+        "file": {"contentBase64": content},
+    })["importCsvTable"]
+    assert not result["errors"]
+    assert result["importedCount"] == 14
+    with TestClient(create_app()) as restarted:
+        rows = query(restarted, "query($id: ID!) { studentRows(tableId: $id) { matricola email dsa dis } }", id=result["table"]["id"])["studentRows"]
+        assert len(rows) == 14
+        assert len({row["matricola"] for row in rows}) == 14
+        assert all(row["email"].endswith("@example.invalid") for row in rows)
+        assert sum(row["dsa"] for row in rows) == 2
+        assert all(not row["dis"] for row in rows)
+
+
+def test_failed_import_rolls_back_table_and_rows(database):
+    client, _ = database
+    course_id = course(database)["id"]
+    engine = client.app.state.store.database.engine.sync_engine
+    def fail_insert(connection, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("INSERT INTO STUDENT_ROWS"):
+            raise OperationalError(None, None, Exception(2013, "simulated write failure"))
+    event.listen(engine, "before_cursor_execute", fail_insert)
+    try:
+        response = client.post("/graphql", json={"query": IMPORT, "variables": {"input": {
+            "table": {"courseId": course_id, "name": "Non deve restare"},
+            "file": {"contentBase64": base64.b64encode(b"Matricola;Nome\n001;Ada\n002;Anna").decode("ascii")},
+        }}})
+        assert response.json()["errors"][0]["extensions"]["code"] == "DATABASE_ERROR"
+    finally:
+        event.remove(engine, "before_cursor_execute", fail_insert)
+    assert query(client, "query($id: ID!) { courseTables(courseId: $id) { id } }", id=course_id)["courseTables"] == []

@@ -38,6 +38,58 @@ input CreateTableInput {
   location: String = null
 }
 
+type CsvImportResult {
+  table: CourseTable
+  importedCount: Int!
+  errors: [CsvIssue!]!
+  warnings: [CsvIssue!]!
+}
+
+type CsvIssue {
+  row: Int
+  field: String!
+  message: String!
+}
+
+type CsvMapping {
+  matricola: Int
+  lastName: Int
+  firstName: Int
+  email: Int
+  dsa: Int
+  dis: Int
+}
+
+input CsvMappingInput {
+  matricola: Int = null
+  lastName: Int = null
+  firstName: Int = null
+  email: Int = null
+  dsa: Int = null
+  dis: Int = null
+}
+
+type CsvPreview {
+  headers: [String!]!
+  mapping: CsvMapping!
+  totalRows: Int!
+  rows: [CsvStudent!]!
+  errors: [CsvIssue!]!
+  warnings: [CsvIssue!]!
+  delimiter: String!
+  headerRow: Int!
+}
+
+type CsvStudent {
+  rowNumber: Int!
+  matricola: String
+  lastName: String!
+  firstName: String!
+  email: String
+  dsa: Boolean!
+  dis: Boolean!
+}
+
 """Date (isoformat)"""
 scalar Date
 
@@ -47,10 +99,22 @@ type FieldError {
   message: String!
 }
 
+input ImportCsvInput {
+  table: CreateTableInput!
+  file: PreviewCsvInput!
+}
+
 type Mutation {
+  previewCsv(input: PreviewCsvInput!): CsvPreview!
+  importCsvTable(input: ImportCsvInput!): CsvImportResult!
   createCourse(input: CreateCourseInput!): CourseResult!
   createTable(input: CreateTableInput!): TableResult!
   addStudent(input: AddStudentInput!): StudentResult!
+}
+
+input PreviewCsvInput {
+  contentBase64: String!
+  mapping: CsvMappingInput = null
 }
 
 type Query {
@@ -70,6 +134,9 @@ type StudentRow {
   matricola: String
   firstName: String!
   lastName: String!
+  email: String
+  dsa: Boolean!
+  dis: Boolean!
 }
 
 type TableResult {

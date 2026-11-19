@@ -16,7 +16,7 @@ def test_exported_schema_and_frontend_operations():
     assert Path("schema.graphql").read_text() == schema.as_str() + "\n"
     source = Path("frontend/src/api.ts").read_text()
     operations = re.findall(r"^  \w+: '(.*?)',?$", source, flags=re.MULTILINE)
-    assert len(operations) == 6
+    assert len(operations) == 8
     for operation in operations:
         assert not validate(schema._schema, parse(operation))
 

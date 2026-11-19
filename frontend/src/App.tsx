@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { graphql, operations, requireSuccess } from './api';
 import type { Course, CourseTable, MutationResult, StudentRow } from './api';
 import './style.css';
+import CsvImport from './CsvImport';
 
 function useList<T>(query: string, field: string, parent: string | null, revision: number) {
   const key = JSON.stringify([query, parent, revision]);
@@ -129,6 +130,9 @@ export default function App() {
           </form>
         </section>
       </div>
+      <CsvImport key={courseId} courseId={courseId} disabled={pending} onBusy={setPending} onCreated={(table, count) => {
+        setTableId(table.id); setRevision(value => value + 1); setError(''); setNotice(`Tabella creata: ${count} studenti importati.`);
+      }} />
       <section className="students">
         <div className="section-heading"><div><h2>{selectedTable?.name || 'Studenti'}</h2><p>{selectedCourse ? [selectedCourse.name, selectedCourse.degreeProgram, selectedCourse.academicYear].filter(Boolean).join(' · ') : 'Crea o seleziona un corso e una tabella.'}</p>
           {selectedTable && (selectedTable.date || selectedTable.location) && <p>{[selectedTable.date && formatDate(selectedTable.date), selectedTable.location].filter(Boolean).join(' · ')}</p>}
@@ -145,9 +149,9 @@ export default function App() {
             <button>Aggiungi studente</button>
           </fieldset>
         </form>
-        <div className="table-scroll"><table><thead><tr><th>Matricola</th><th>Cognome</th><th>Nome</th></tr></thead><tbody>
-          {rows.items.map(row => <tr key={row.id}><td>{row.matricola ?? <span className="muted">Da inserire</span>}</td><td>{row.lastName}</td><td>{row.firstName}</td></tr>)}
-          {!rows.items.length && <tr><td colSpan={3} className="empty">{rows.loading ? 'Caricamento…' : rows.error ? 'Impossibile caricare gli studenti.' : tableId ? 'La tabella è vuota. Aggiungi il primo studente.' : 'Seleziona una tabella per visualizzare gli studenti.'}</td></tr>}
+        <div className="table-scroll"><table><thead><tr><th>Matricola</th><th>Cognome</th><th>Nome</th><th>Email</th><th>DSA</th><th>DIS</th></tr></thead><tbody>
+          {rows.items.map(row => <tr key={row.id}><td>{row.matricola ?? <span className="muted">Da inserire</span>}</td><td>{row.lastName}</td><td>{row.firstName}</td><td>{row.email}</td><td>{row.dsa ? 'Sì' : ''}</td><td>{row.dis ? 'Sì' : ''}</td></tr>)}
+          {!rows.items.length && <tr><td colSpan={6} className="empty">{rows.loading ? 'Caricamento…' : rows.error ? 'Impossibile caricare gli studenti.' : tableId ? 'La tabella è vuota. Aggiungi il primo studente.' : 'Seleziona una tabella per visualizzare gli studenti.'}</td></tr>}
         </tbody></table></div>
       </section>
     </main>

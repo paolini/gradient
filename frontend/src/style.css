@@ -21,6 +21,12 @@ button:disabled, fieldset:disabled button { opacity: .5; cursor: default; }
 fieldset { border: 0; padding: 0; margin: 24px 0 0; min-width: 0; }
 legend { padding: 0; font-weight: 650; font-size: 14px; margin-bottom: 14px; }
 .students { margin-top: 24px; }
+.csv-import { margin-top: 24px; }
+.csv-mapping { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.csv-issues { border-left: 3px solid #bd9149; padding-left: 16px; margin-top: 20px; }
+.csv-issues h3 { font-size: 15px; }
+.csv-issues li { margin-bottom: 6px; font-size: 14px; }
+caption { text-align: left; margin-bottom: 12px; font-weight: 600; }
 .section-heading > span { color: #536770; font-size: 13px; white-space: nowrap; }
 .student-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; align-items: end; gap: 12px; }
 .student-form label { margin: 0; position: relative; }

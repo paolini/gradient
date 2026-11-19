@@ -3,11 +3,13 @@ from datetime import date as Date
 from pathlib import Path
 
 import strawberry
+from anyio import to_thread
 from graphql import GraphQLError
 from sqlalchemy.exc import SQLAlchemyError
 from strawberry.types import ExecutionContext, Info
 
 from gradient.database import database_error_details
+from gradient.csv_import import FIELDS, Mapping, preview_csv
 from gradient.services import InputError
 
 logger = logging.getLogger(__name__)
@@ -56,6 +58,9 @@ class StudentRow:
     matricola: str | None
     first_name: str
     last_name: str
+    email: str | None
+    dsa: bool
+    dis: bool
 
 
 def course_type(row):
@@ -67,7 +72,7 @@ def table_type(row):
 
 
 def student_type(row):
-    return StudentRow(id=strawberry.ID(row.id), table_id=strawberry.ID(row.table_id), matricola=row.matricola, first_name=row.first_name, last_name=row.last_name)
+    return StudentRow(id=strawberry.ID(row.id), table_id=strawberry.ID(row.table_id), matricola=row.matricola, first_name=row.first_name, last_name=row.last_name, email=row.email, dsa=row.dsa, dis=row.dis)
 
 
 @strawberry.type
@@ -118,6 +123,81 @@ class AddStudentInput:
     last_name: str = ""
 
 
+@strawberry.input
+class CsvMappingInput:
+    matricola: int | None = None
+    last_name: int | None = None
+    first_name: int | None = None
+    email: int | None = None
+    dsa: int | None = None
+    dis: int | None = None
+
+
+@strawberry.type
+class CsvMapping:
+    matricola: int | None
+    last_name: int | None
+    first_name: int | None
+    email: int | None
+    dsa: int | None
+    dis: int | None
+
+
+@strawberry.type
+class CsvIssue:
+    row: int | None
+    field: str
+    message: str
+
+
+@strawberry.type
+class CsvStudent:
+    row_number: int
+    matricola: str | None
+    last_name: str
+    first_name: str
+    email: str | None
+    dsa: bool
+    dis: bool
+
+
+@strawberry.type
+class CsvPreview:
+    headers: list[str]
+    mapping: CsvMapping
+    total_rows: int
+    rows: list[CsvStudent]
+    errors: list[CsvIssue]
+    warnings: list[CsvIssue]
+    delimiter: str
+    header_row: int
+
+
+@strawberry.input
+class PreviewCsvInput:
+    content_base64: str
+    mapping: CsvMappingInput | None = None
+
+
+@strawberry.input
+class ImportCsvInput:
+    table: CreateTableInput
+    file: PreviewCsvInput
+
+
+@strawberry.type
+class CsvImportResult:
+    table: CourseTable | None
+    imported_count: int
+    errors: list[CsvIssue]
+    warnings: list[CsvIssue]
+
+
+async def read_csv(input: PreviewCsvInput):
+    mapping = Mapping(**{field: getattr(input.mapping, field) for field in FIELDS}) if input.mapping else None
+    return await to_thread.run_sync(lambda: preview_csv(input.content_base64, mapping))
+
+
 async def execute(operation):
     try:
         return await operation
@@ -160,6 +240,31 @@ class Query:
 
 @strawberry.type
 class Mutation:
+    @strawberry.mutation
+    async def preview_csv(self, input: PreviewCsvInput) -> CsvPreview:
+        preview = await read_csv(input)
+        return CsvPreview(
+            headers=preview.headers, mapping=CsvMapping(**vars(preview.mapping)),
+            total_rows=preview.total_rows, rows=[CsvStudent(**vars(row)) for row in preview.rows[:100]],
+            errors=[CsvIssue(**vars(error)) for error in preview.errors],
+            warnings=[CsvIssue(**vars(warning)) for warning in preview.warnings],
+            delimiter=preview.delimiter, header_row=preview.header_row,
+        )
+
+    @strawberry.mutation
+    async def import_csv_table(self, info: Info, input: ImportCsvInput) -> CsvImportResult:
+        # Revalidate the file on save; never trust the client's earlier preview.
+        preview = await read_csv(input.file)
+        warnings = [CsvIssue(**vars(warning)) for warning in preview.warnings]
+        if preview.errors:
+            return CsvImportResult(table=None, imported_count=0, errors=[CsvIssue(**vars(error)) for error in preview.errors], warnings=warnings)
+        table = input.table
+        result = await mutate(info.context["store"].import_table(str(table.course_id), table.name, table.date, table.location, preview), TableResult, "table", table_type)
+        return CsvImportResult(
+            table=result.table, imported_count=len(preview.rows) if result.table else 0,
+            errors=[CsvIssue(row=None, field=error.field, message=error.message) for error in result.errors], warnings=warnings,
+        )
+
     @strawberry.mutation
     async def create_course(self, info: Info, input: CreateCourseInput) -> CourseResult:
         return await mutate(info.context["store"].create_course(input.name, input.academic_year, input.degree_program), CourseResult, "course", course_type)

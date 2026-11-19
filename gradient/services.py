@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from gradient.database import Database
-from gradient.models import Course, CourseTable, StudentRow
+from gradient.models import Course, CourseTable, StudentRow, new_id
+from gradient.csv_import import Preview
 
 
 class InputError(Exception):
@@ -102,3 +103,24 @@ class Store:
                 raise InputError("matricola", "Matricola già presente in questa tabella.", "DUPLICATE_MATRICOLA") from None
             raise
         return row
+
+    async def import_table(self, course_id: str, name: str, date: DateValue | None, location: str | None, preview: Preview):
+        if preview.errors or not preview.rows:
+            raise InputError("file", "Il CSV contiene errori o non contiene studenti.")
+        course_id = identifier(course_id, "courseId")
+        table = CourseTable(
+            id=new_id(), course_id=course_id, name=text(name, "name"), date=date,
+            location=text(location or "", "location", required=False) or None,
+        )
+        async with self.database.sessions.begin() as session:
+            await self.require(session, Course, course_id, "courseId")
+            session.add(table)
+            await session.flush()
+            session.add_all([
+                StudentRow(
+                    table_id=table.id, matricola=row.matricola,
+                    first_name=row.first_name, last_name=row.last_name,
+                    email=row.email, dsa=row.dsa, dis=row.dis,
+                ) for row in preview.rows
+            ])
+        return table

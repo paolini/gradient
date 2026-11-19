@@ -1,7 +1,7 @@
 from datetime import date as DateValue
 from uuid import uuid4
 
-from sqlalchemy import Date, ForeignKey, MetaData, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, MetaData, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -47,3 +47,6 @@ class StudentRow(Base):
     matricola: Mapped[str | None] = mapped_column(String(64, collation="utf8mb4_bin"))
     first_name: Mapped[str] = mapped_column(String(200), default="")
     last_name: Mapped[str] = mapped_column(String(200), default="")
+    email: Mapped[str | None] = mapped_column(String(320))
+    dsa: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    dis: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
