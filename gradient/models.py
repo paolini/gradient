@@ -1,7 +1,7 @@
-from datetime import date as DateValue
+from datetime import date as DateValue, datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, ForeignKey, MetaData, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, MetaData, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -22,6 +22,7 @@ class Course(Base):
     __tablename__ = "courses"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     academic_year: Mapped[str] = mapped_column(String(9))
     degree_program: Mapped[str | None] = mapped_column(String(200))
@@ -50,3 +51,24 @@ class StudentRow(Base):
     email: Mapped[str | None] = mapped_column(String(320))
     dsa: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     dis: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
+
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("provider", "subject", name="uq_users_provider_subject"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    provider: Mapped[str] = mapped_column(String(16))
+    subject: Mapped[str] = mapped_column(String(255, collation="utf8mb4_bin"))
+    email: Mapped[str] = mapped_column(String(320))
+    name: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    last_login: Mapped[datetime] = mapped_column(DateTime)
+
+
+class LoginSession(Base):
+    __tablename__ = "login_sessions"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)

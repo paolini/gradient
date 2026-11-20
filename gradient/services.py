@@ -34,12 +34,13 @@ def identifier(value: str, field: str) -> str:
 
 
 class Store:
-    def __init__(self, database: Database):
+    def __init__(self, database: Database, user_id: str | None = None):
         self.database = database
+        self.user_id = user_id
 
     async def courses(self):
         async with self.database.sessions() as session:
-            return list(await session.scalars(select(Course).order_by(Course.academic_year.desc(), Course.name, Course.id)))
+            return list(await session.scalars(select(Course).where(Course.owner_id == self.user_id).order_by(Course.academic_year.desc(), Course.name, Course.id)))
 
     async def tables(self, course_id: str):
         course_id = identifier(course_id, "courseId")
@@ -53,9 +54,10 @@ class Store:
             await self.require(session, CourseTable, table_id, "tableId")
             return list(await session.scalars(select(StudentRow).where(StudentRow.table_id == table_id).order_by(StudentRow.last_name, StudentRow.first_name, StudentRow.id)))
 
-    @staticmethod
-    async def require(session, model, entity_id: str, field: str):
-        if await session.get(model, entity_id) is None:
+    async def require(self, session, model, entity_id: str, field: str):
+        entity = await session.get(model, entity_id)
+        course = entity if model is Course else await session.get(Course, entity.course_id) if entity else None
+        if course is None or course.owner_id != self.user_id:
             raise InputError(field, "Elemento non trovato.", "NOT_FOUND")
 
     async def create_course(self, name: str, academic_year: str, degree_program: str | None = None):
@@ -68,7 +70,7 @@ class Store:
         if start < 1000 or start >= 9999 or match[2] not in (str(start + 1), str(start + 1)[-2:]):
             raise InputError("academicYear", "L'anno accademico deve comprendere due anni consecutivi.")
         course = Course(
-            name=name, academic_year=f"{start}/{start + 1}",
+            owner_id=self.user_id, name=name, academic_year=f"{start}/{start + 1}",
             degree_program=text(degree_program or "", "degreeProgram", required=False) or None,
         )
         async with self.database.sessions.begin() as session:

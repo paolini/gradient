@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, event, select
 from sqlalchemy.exc import OperationalError
 
+from types import SimpleNamespace
+from gradient.auth import require_user
 from gradient.app import create_app
 from gradient.models import Course, CourseTable, StudentRow
 
@@ -15,6 +17,13 @@ pytestmark = [
     pytest.mark.database,
     pytest.mark.skipif(os.getenv("GRADIENT_TEST_DB") != "1", reason="Usare make test-db per abilitare MariaDB"),
 ]
+
+
+def authenticated_client():
+    # Questi test preesistenti verificano la persistenza; l'accesso reale è in test_auth.py.
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: SimpleNamespace(id=None)
+    return TestClient(app, headers={"X-Gradient-Request": "1"})
 
 
 def query(client, document, **variables):
@@ -28,7 +37,7 @@ def query(client, document, **variables):
 @pytest.fixture
 def database():
     owned_courses = []
-    with TestClient(create_app()) as client:
+    with authenticated_client() as client:
         try:
             yield client, owned_courses
         finally:
@@ -72,7 +81,7 @@ def test_persistence_across_app_restart(database):
     table_id = table(client, created_course["id"])
     row = student(client, table_id, "001234")["row"]
     assert row["matricola"] == "001234"
-    with TestClient(create_app()) as restarted:
+    with authenticated_client() as restarted:
         courses = query(restarted, "{ courses { id } }")["courses"]
         assert {"id": created_course["id"]} in courses
         tables = query(restarted, "query($id: ID!) { courseTables(courseId: $id) { id } }", id=created_course["id"])["courseTables"]
@@ -111,7 +120,7 @@ def test_course_and_table_details_survive_reload(database):
     created = course(database, "Matematica")
     table_id = table(client, created["id"], date="2026-11-18", location="Aula A")
     empty_table_id = table(client, created["id"], "Elenco studenti")
-    with TestClient(create_app()) as restarted:
+    with authenticated_client() as restarted:
         courses = query(restarted, "{ courses { id degreeProgram } }")["courses"]
         assert next(item for item in courses if item["id"] == created["id"])["degreeProgram"] == "Matematica"
         tables = query(restarted, "query($id: ID!) { courseTables(courseId: $id) { id date location } }", id=created["id"])["courseTables"]
@@ -138,7 +147,7 @@ def test_import_reviewed_csv_persists_all_students(database):
     })["importCsvTable"]
     assert not result["errors"]
     assert result["importedCount"] == 14
-    with TestClient(create_app()) as restarted:
+    with authenticated_client() as restarted:
         rows = query(restarted, "query($id: ID!) { studentRows(tableId: $id) { matricola email dsa dis } }", id=result["table"]["id"])["studentRows"]
         assert len(rows) == 14
         assert len({row["matricola"] for row in rows}) == 14

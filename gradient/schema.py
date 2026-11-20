@@ -224,7 +224,20 @@ async def mutate(operation, result_type, field, convert):
 
 
 @strawberry.type
+class User:
+    id: strawberry.ID
+    name: str
+    email: str
+    provider: str
+
+
+@strawberry.type
 class Query:
+    @strawberry.field
+    def me(self, info: Info) -> User:
+        user = info.context["user"]
+        return User(id=strawberry.ID(user.id), name=user.name, email=user.email, provider=user.provider)
+
     @strawberry.field
     async def courses(self, info: Info) -> list[Course]:
         return [course_type(row) for row in await execute(info.context["store"].courses())]

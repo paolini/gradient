@@ -118,6 +118,7 @@ input PreviewCsvInput {
 }
 
 type Query {
+  me: User!
   courses: [Course!]!
   courseTables(courseId: ID!): [CourseTable!]!
   studentRows(tableId: ID!): [StudentRow!]!
@@ -142,4 +143,11 @@ type StudentRow {
 type TableResult {
   table: CourseTable
   errors: [FieldError!]!
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  provider: String!
 }

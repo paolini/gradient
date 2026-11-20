@@ -20,7 +20,13 @@ GraphQL è stato scelto in particolare per il contratto client/server esplicito;
 
 ## Accesso
 
-L'applicazione deve prevedere l'autenticazione OAuth per i docenti. Il provider di autenticazione è da definire. Un eventuale accesso per gli studenti sarà discusso in seguito.
+È implementato il login OAuth con **Google** e **UniPi (WSO2)**. Chiunque completi il login può accedere e creare corsi; ciascun utente può leggere e modificare soltanto i propri corsi, comprese tabelle e righe studente. I controlli sono applicati dal backend anche quando vengono inviati direttamente gli ID. La condivisione dei corsi e ulteriori ruoli restano da progettare. Un eventuale accesso per gli studenti sarà discusso in seguito.
+
+L'account viene creato al primo login ed è identificato dalla coppia provider/subject, indipendentemente dagli studenti valutati. Nome ed email sono aggiornati dai dati del provider a ogni accesso. Account Google e UniPi restano separati anche con la stessa email; il collegamento di più identità non è implementato. Per Google è richiesta un'email verificata; per UniPi il profilo è letto dall'endpoint autenticato dell'ateneo, con compatibilità per i campi WSO2 storici, come nell'integrazione di MatBit.
+
+Le sessioni durano sette giorni e sono revocabili: il logout invalida la sessione corrente nel database, senza disconnettere l'account Google/UniPi negli altri servizi. Il cookie applicativo è HttpOnly e SameSite=Lax, Secure su HTTPS; nel database viene conservato soltanto l'hash del token casuale. I token OAuth non vengono conservati. Il flusso usa authorization code, state e PKCE S256 tramite Authlib; l'identità viene letta esclusivamente dall'endpoint HTTPS userinfo, senza utilizzare ID token non verificati. Lo stato temporaneo OAuth scade dopo dieci minuti.
+
+La migrazione `0004` aggiunge utenti, sessioni e proprietario dei corsi. I corsi precedenti sono conservati con proprietario mancante e non sono visibili a nessun account. La loro assegnazione deve essere esplicita, dopo aver identificato il corso e l'ID dell'utente; non vengono attribuiti automaticamente al primo accesso. Non è ancora presente un pannello amministrativo di gestione o assegnazione.
 
 ## Entità e organizzazione dei dati
 
@@ -159,7 +165,7 @@ La gestione dei tentativi ripetuti non rientra nella prima fase. Quando sarà af
 Restano da discutere in particolare:
 
 - stack applicativo, librerie e schema del database MariaDB;
-- provider di autenticazione e autorizzazioni sui corsi;
+- condivisione dei corsi, ruoli e collegamento tra identità di accesso;
 - eventuale accesso degli studenti;
 - reimportazioni e aggiornamento dei dati anagrafici nelle tabelle esistenti;
 - configurazione delle colonne e delle informazioni delle prove;
@@ -175,9 +181,9 @@ Questo file descrive il progetto e le decisioni funzionali concordate. Le istruz
 
 ### Ambiente di sviluppo
 
-Il primo flusso applicativo consente di creare corsi, tabelle e righe studente e consultarli tramite GraphQL e interfaccia React. Le righe hanno ID stabili, matricole facoltative e nome/cognome locali alla tabella. L'importazione iniziale CSV è implementata con anteprima, associazione delle colonne e salvataggio atomico. La migrazione `0003` aggiunge email e flag DSA/DIS alle righe esistenti, inizialmente vuoti/off. Colonne custom, voti, formule e autenticazione non sono ancora implementati: questa versione è destinata allo sviluppo locale.
+Il primo flusso applicativo consente di creare corsi, tabelle e righe studente e consultarli tramite GraphQL e interfaccia React. Le righe hanno ID stabili, matricole facoltative e nome/cognome locali alla tabella. L'importazione iniziale CSV è implementata con anteprima, associazione delle colonne e salvataggio atomico. La migrazione `0003` aggiunge email e flag DSA/DIS alle righe esistenti, inizialmente vuoti/off. Il login Google/UniPi, le sessioni e l’isolamento dei corsi per proprietario sono implementati con la migrazione `0004`. Colonne custom, voti e formule non sono ancora implementati.
 
-Stato delle verifiche al 19 novembre 2026: passati 50 test senza database e 6 test su MariaDB, controllo dei tipi, compatibilità delle dipendenze e build frontend. La migrazione fino a `0003` è stata applicata al database locale e `alembic check` non rileva differenze rispetto ai modelli. Verificati nel browser caricamento, anteprima, importazione dei 14 studenti fittizi e permanenza dei dati dopo il ricaricamento.
+Stato delle verifiche al 19 novembre 2026: passati 58 test senza database e 7 test su MariaDB, controllo dei tipi, compatibilità delle dipendenze e build frontend. La migrazione fino a `0004` è stata applicata al database locale e `alembic check` non rileva differenze rispetto ai modelli. Verificati in precedenza nel browser caricamento, anteprima, importazione dei 14 studenti fittizi e permanenza dei dati dopo il ricaricamento. I nuovi flussi OAuth sono verificati con provider simulati; il login reale Google/UniPi richiede ancora credenziali e callback registrate. I test MariaDB verificano sessioni reali, separazione degli account con la stessa email, isolamento dei corsi, logout e scadenza.
 
 Le dipendenze Python sono in `pyproject.toml` e `uv.lock`; il frontend React/Vite è in `frontend/`, con il proprio lockfile npm. I modelli e il backend sono nel pacchetto `gradient/`, le migrazioni in `migrations/`. Il pool del backend ha un massimo di due connessioni per processo.
 
@@ -203,13 +209,26 @@ make dev      # frontend; aprire l'indirizzo indicato da Vite
 
 Non è necessario attivare manualmente `.venv`: i comandi Python del progetto si eseguono tramite `uv run`. Il Makefile consente di sovrascrivere `UV` e `NPM` se gli eseguibili sono installati in percorsi differenti. Le migrazioni vengono eseguite esplicitamente, mai all'avvio del server.
 
-Vite inoltra `/graphql` al backend locale, senza richiedere configurazioni CORS. L'editor GraphQL è disponibile su `http://127.0.0.1:8000/graphql`. Per provare il flusso, creare un corso, creare una tabella, inserire uno studente e ricaricare la pagina: dopo la selezione del corso e della tabella i dati restano disponibili.
+Vite inoltra `/graphql` e `/auth` al backend locale, senza richiedere configurazioni CORS. Per provare il flusso, configurare almeno un provider, accedere, creare un corso, una tabella e uno studente e ricaricare la pagina. Tutte le richieste GraphQL richiedono una sessione autenticata; le POST richiedono l'intestazione `X-Gradient-Request: 1`. L'editor GraphQL può essere aperto tramite l'origine frontend dopo il login, configurando questa intestazione. Anche il logout richiede una POST con la stessa intestazione. Non è previsto un accesso anonimo di sviluppo.
+
+### Configurazione del login
+
+Configurare in `.env` i parametri descritti in [.env.example](.env.example):
+
+- `AUTH_BASE_URL`: origine pubblica unica dell'applicazione, in sviluppo `http://127.0.0.1:5173`. Aprire esattamente questa origine; HTTPS è obbligatorio fuori da localhost.
+- `AUTH_SECRET`: segreto casuale di almeno 32 caratteri per lo stato temporaneo OAuth, per esempio generato con `uv run python -c "import secrets; print(secrets.token_urlsafe(48))"` e salvato soltanto nella configurazione locale.
+- `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`: credenziali di un client OAuth web Google.
+- `WSO2_CLIENT_ID` e `WSO2_CLIENT_SECRET`: credenziali del client autorizzato da UniPi; gli endpoint predefiniti sono quelli di WSO2 in MatBit, sovrascrivibili con le variabili `WSO2_*_URL` documentate.
+
+Registrare presso i provider le callback esatte `${AUTH_BASE_URL}/auth/callback/google` e `${AUTH_BASE_URL}/auth/callback/unipi` (sostituire la variabile con il valore effettivo). Abilitare authorization code e PKCE S256, con scope `openid email profile`. Il backend scambia il codice con autenticazione del client HTTP Basic e legge il profilo userinfo. Servono credenziali valide e una configurazione consentita dal provider: i test con provider simulati non sostituiscono la verifica reale, in particolare per le impostazioni del client UniPi.
+
+Solo i provider completamente configurati vengono mostrati nella pagina di accesso. Senza provider non è possibile accedere ai dati. Le credenziali di MatBit non vengono copiate automaticamente. Riavviare il backend dopo modifiche alla configurazione o alle dipendenze. In produzione il proxy dovrà pubblicare `/auth` e `/graphql` sulla stessa origine del frontend, senza cache delle risposte autenticate.
 
 ### Contratto GraphQL e verifiche
 
 Il contratto è dichiarato in `gradient/schema.py` ed esportato in [schema.graphql](schema.graphql) con `make schema`. Le operazioni frontend sono in `frontend/src/api.ts`; i test ne verificano la validità rispetto allo schema e controllano che il file esportato sia aggiornato.
 
-Le operazioni disponibili sono `courses`, `courseTables`, `studentRows`, `createCourse`, `createTable`, `addStudent`, `previewCsv` e `importCsvTable`. Le mutazioni restituiscono errori di validazione con campo, codice e messaggio; l'importazione indica anche la riga del CSV. Gli ID inesistenti e le matricole duplicate vengono segnalati senza salvare righe parziali. Gli anni accademici accettano `2026/27` o `2026/2027` e vengono memorizzati nella forma completa. Matricole vuote diventano valori mancanti, mentre gli zeri iniziali vengono conservati.
+Le operazioni disponibili sono `me` (profilo autenticato), `courses`, `courseTables`, `studentRows`, `createCourse`, `createTable`, `addStudent`, `previewCsv` e `importCsvTable`. Le mutazioni restituiscono errori di validazione con campo, codice e messaggio; l'importazione indica anche la riga del CSV. Gli ID inesistenti e le matricole duplicate vengono segnalati senza salvare righe parziali. Gli anni accademici accettano `2026/27` o `2026/2027` e vengono memorizzati nella forma completa. Matricole vuote diventano valori mancanti, mentre gli zeri iniziali vengono conservati.
 
 Le risposte GraphQL mantengono un messaggio generico e il codice `DATABASE_ERROR` per gli errori database. La diagnosi specifica viene scritta soltanto nei log del backend: servizio non raggiungibile, connessione interrotta, credenziali errate, permessi insufficienti, database inesistente o struttura da inizializzare o aggiornare. Se MariaDB non è raggiungibile, il log invita a verificare avvio, host e porta; `make migrate` viene suggerito quando mancano tabelle o colonne. Questi messaggi diagnostici non riportano credenziali o dettagli grezzi del driver.
 

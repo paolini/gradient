@@ -10,15 +10,15 @@ Per gli errori del database mantenere un messaggio generico al client; scrivere 
 
 ## Stato del prototipo e ripresa del lavoro
 
-Sono implementati creazione e lettura di corsi, tabelle e righe studente tramite GraphQL e React, e importazione iniziale CSV con anteprima, associazione delle colonne e salvataggio atomico. La migrazione `0003` aggiunge email e flag DSA/DIS alle righe. Il contratto esportato è in `schema.graphql`. Non sono ancora implementati autenticazione, reimportazioni, colonne personalizzabili, voti, formule o collegamenti tra tabelle.
+Sono implementati creazione e lettura di corsi, tabelle e righe studente tramite GraphQL e React, e importazione iniziale CSV con anteprima, associazione delle colonne e salvataggio atomico. La migrazione `0003` aggiunge email e flag DSA/DIS alle righe. Il contratto esportato è in `schema.graphql`. Sono implementati login Google/UniPi tramite OAuth, utenti distinti per provider/subject, sessioni revocabili e isolamento dei corsi per proprietario (migrazione `0004`). Non sono ancora implementati condivisione dei corsi, collegamento account, pannello amministrativo, reimportazioni, colonne personalizzabili, voti, formule o collegamenti tra tabelle.
 
-Al 19 novembre 2026 sono riusciti 50 test senza database, 6 test su MariaDB, controllo dei tipi, compatibilità delle dipendenze e build frontend. Applicate le migrazioni fino a `0003`; `alembic check` non rileva differenze. Verificati anche nel browser anteprima, importazione del CSV con 14 studenti fittizi e rilettura dopo ricaricamento. I test database includono il rollback della nuova tabella se il salvataggio delle righe fallisce. Non assumere che i servizi locali siano ancora avviati nelle sessioni successive.
+Al 19 novembre 2026 sono riusciti 58 test senza database, 7 test su MariaDB, controllo dei tipi, compatibilità delle dipendenze e build frontend. Applicate le migrazioni fino a `0004`; `alembic check` non rileva differenze. I flussi OAuth sono testati con provider simulati e sessioni reali su MariaDB; il login reale Google/UniPi richiede ancora client OAuth e callback registrate. Verificati in precedenza nel browser anteprima, importazione del CSV con 14 studenti fittizi e rilettura dopo ricaricamento. I test database includono il rollback della nuova tabella se il salvataggio delle righe fallisce. Non assumere che i servizi locali siano ancora avviati nelle sessioni successive.
 
 Il prossimo lavoro funzionale va concordato con l'utente. Riavviare il backend dopo modifiche a `.env` o alle dipendenze. Non cancellare volumi né alterare utenti del database per risolvere problemi di connessione senza una richiesta specifica.
 
 ## Scelte tecniche e aspetti ancora aperti
 
-Le scelte concordate sono MariaDB per il database, Python con FastAPI e Uvicorn per il backend, SQLAlchemy per i modelli e l'accesso al database, Alembic per le migrazioni, GraphQL con Strawberry per l'API e React con Vite per il frontend. Il contratto client/server esplicito è una motivazione centrale della scelta di GraphQL. Le altre librerie, il provider di autenticazione e la distribuzione sono ancora da confermare. Non trattare ulteriori suggerimenti come decisioni approvate. Seguire la richiesta corrente dell'utente per l'implementazione.
+Le scelte concordate sono MariaDB per il database, Python con FastAPI e Uvicorn per il backend, SQLAlchemy per i modelli e l'accesso al database, Alembic per le migrazioni, GraphQL con Strawberry per l'API e React con Vite per il frontend. Il contratto client/server esplicito è una motivazione centrale della scelta di GraphQL. I provider concordati sono Google e UniPi (WSO2, come MatBit). Il login usa Authlib e HTTPX, con itsdangerous per lo stato OAuth. La distribuzione e ulteriori librerie sono ancora da confermare. Non trattare ulteriori suggerimenti come decisioni approvate. Seguire la richiesta corrente dell'utente per l'implementazione.
 
 La rappresentazione dei dati descritta nel README è logica e non impone tipi o strutture specifici di un database.
 
@@ -57,3 +57,11 @@ I file di esempio e la documentazione devono rivolgersi a uno sviluppatore gener
 ## Metodo di lavoro
 
 Quando una scelta aperta influenza il lavoro richiesto, esplicitarla e discuterla con l'utente anziché trasformarla silenziosamente in un requisito. Per le modifiche documentali verificare la coerenza tra README e queste istruzioni.
+
+## Utenti e accesso
+
+Chiunque completi il login Google o UniPi può accedere, ma può gestire soltanto i propri corsi. Non assegnare automaticamente i corsi preesistenti: `owner_id` mancante li rende invisibili agli utenti, in attesa di assegnazione esplicita. Non unire account tramite email; le identità provider/subject sono indipendenti. La condivisione e i ruoli ulteriori restano aperti.
+
+Tutto GraphQL richiede autenticazione HTTP; ogni POST richiede `X-Gradient-Request: 1` e, se presente, un'Origin corrispondente ad `AUTH_BASE_URL`. I controlli di proprietà in Store coprono corsi, tabelle, righe e importazioni. Conservare sessioni database separate per operazione. I test precedenti di persistenza usano una dipendenza autenticazione sostitutiva; i test dedicati verificano cookie e sessioni reali.
+
+Non copiare credenziali da MatBit. Configurare i client OAuth e le callback come documentato nel README. L'autenticazione usa userinfo HTTPS del provider, state e PKCE; non decodificare ID token senza verificarli. Il logout revoca la sessione locale, non quella del provider.

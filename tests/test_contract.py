@@ -6,6 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 from graphql import parse, validate
 
+from types import SimpleNamespace
+from gradient.auth import require_user
 from gradient.app import create_app
 from gradient.config import Settings
 from gradient.schema import schema
@@ -42,7 +44,9 @@ def test_input_validation():
 
 def test_http_validation_without_database():
     settings = Settings(_env_file=None, db_password="unused")
-    with TestClient(create_app(settings)) as client:
+    app = create_app(settings)
+    app.dependency_overrides[require_user] = lambda: SimpleNamespace(id=None)
+    with TestClient(app, headers={"X-Gradient-Request": "1"}) as client:
         result = client.post("/graphql", json={
             "query": 'mutation { createCourse(input: {name: " ", academicYear: "2026/27"}) { course { id } errors { field code } } }',
         })

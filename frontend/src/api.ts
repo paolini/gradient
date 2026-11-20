@@ -12,11 +12,15 @@ export async function graphql<T>(query: string, variables: Record<string, unknow
   try {
     response = await fetch('/graphql', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Gradient-Request': '1' },
       body: JSON.stringify({ query, variables }),
     });
   } catch {
     throw new Error('Backend non raggiungibile. Verifica che sia avviato.');
+  }
+  if (response.status === 401) {
+    window.dispatchEvent(new Event('gradient-session-expired'));
+    throw new Error('Sessione scaduta. Accedi nuovamente.');
   }
   if (!response.ok) throw new Error(`Il backend ha risposto con errore HTTP ${response.status}.`);
   const body = await response.json();
