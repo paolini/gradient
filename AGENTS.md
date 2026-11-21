@@ -2,7 +2,7 @@
 
 ## Stato e documentazione
 
-Il progetto è nella fase di definizione dei requisiti e sviluppo del primo prototipo. Leggere [README.md](README.md) prima di proporre modifiche: contiene la descrizione funzionale e le decisioni concordate con il committente.
+Il progetto è nella fase di definizione dei requisiti e sviluppo del primo prototipo. Leggere [DOCUMENTATION.md](DOCUMENTATION.md) prima di proporre modifiche: contiene la descrizione funzionale e le decisioni concordate con il committente. [DEVELOPMENT.md](DEVELOPMENT.md) raccoglie i dettagli tecnici; [README.md](README.md) contiene soltanto una breve descrizione e le istruzioni di avvio locale e di produzione, da mantenere sintetiche.
 
 Mantenere la documentazione in italiano. Distinguere le decisioni accettate dalle proposte e dalle questioni aperte. Aggiornare la documentazione quando vengono concordate nuove decisioni, senza presentare una funzionalità prevista come già implementata.
 
@@ -20,7 +20,7 @@ Il prossimo lavoro funzionale va concordato con l'utente. Riavviare il backend d
 
 Le scelte concordate sono MariaDB per il database, Python con FastAPI e Uvicorn per il backend, SQLAlchemy per i modelli e l'accesso al database, Alembic per le migrazioni, GraphQL con Strawberry per l'API e React con Vite per il frontend. Il contratto client/server esplicito è una motivazione centrale della scelta di GraphQL. I provider concordati sono Google e UniPi (WSO2, come MatBit). Il login usa Authlib e HTTPX, con itsdangerous per lo stato OAuth. La distribuzione e ulteriori librerie sono ancora da confermare. Non trattare ulteriori suggerimenti come decisioni approvate. Seguire la richiesta corrente dell'utente per l'implementazione.
 
-La rappresentazione dei dati descritta nel README è logica e non impone tipi o strutture specifici di un database.
+La rappresentazione dei dati descritta in DOCUMENTATION.md è logica e non impone tipi o strutture specifici di un database.
 
 Usare uv per dipendenze e ambiente Python, npm per il frontend, un Makefile per i comandi comuni e Docker per l'immagine di deploy. L'utente ha autorizzato il primo flusso con connessione MariaDB, migrazione, creazione e lettura di corsi, tabelle e righe studente tramite GraphQL e interfaccia React.
 
@@ -56,7 +56,7 @@ I file di esempio e la documentazione devono rivolgersi a uno sviluppatore gener
 
 ## Metodo di lavoro
 
-Quando una scelta aperta influenza il lavoro richiesto, esplicitarla e discuterla con l'utente anziché trasformarla silenziosamente in un requisito. Per le modifiche documentali verificare la coerenza tra README e queste istruzioni.
+Quando una scelta aperta influenza il lavoro richiesto, esplicitarla e discuterla con l'utente anziché trasformarla silenziosamente in un requisito. Per le modifiche documentali verificare la coerenza tra README, DOCUMENTATION.md, DEVELOPMENT.md e queste istruzioni.
 
 ## Utenti e accesso
 
@@ -64,7 +64,7 @@ Chiunque completi il login Google o UniPi può accedere, ma può gestire soltant
 
 Tutto GraphQL richiede autenticazione HTTP; ogni POST richiede `X-Gradient-Request: 1` e, se presente, un'Origin corrispondente ad `AUTH_BASE_URL`. I controlli di proprietà in Store coprono corsi, tabelle, righe e importazioni. Conservare sessioni database separate per operazione. I test precedenti di persistenza usano una dipendenza autenticazione sostitutiva; i test dedicati verificano cookie e sessioni reali.
 
-Non copiare credenziali da MatBit. Configurare i client OAuth e le callback come documentato nel README. L'autenticazione usa userinfo HTTPS del provider, state e PKCE; non decodificare ID token senza verificarli. Il logout revoca la sessione locale, non quella del provider.
+Non copiare credenziali da MatBit. Configurare i client OAuth e le callback come documentato nel README e in DEVELOPMENT.md. L'autenticazione usa userinfo HTTPS del provider, state e PKCE; non decodificare ID token senza verificarli. Il logout revoca la sessione locale, non quella del provider.
 
 ## Immagine di produzione
 
