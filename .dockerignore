@@ -6,3 +6,12 @@
 .env
 .env.*
 !.env.example
+.pytest_cache
+.ruff_cache
+**/*.py[cod]
+**/*.tsbuildinfo
+tests
+examples
+.codex
+.agents
+.aws

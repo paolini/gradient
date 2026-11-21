@@ -1,9 +1,12 @@
 UV ?= uv
 NPM ?= npm
+DOCKER ?= docker
+IMAGE ?= gradient:latest
 
-.PHONY: help install check build dev backend migrate schema test test-db
+.PHONY: help install check build dev backend migrate schema test test-db docker-build
 
 help:
+	@echo "docker-build  Costruisce l’immagine di produzione (IMAGE=gradient:latest)"
 	@echo "install  Installa le dipendenze Python e frontend dai lockfile"
 	@echo "check    Verifica le dipendenze Python e i tipi del frontend"
 	@echo "build    Compila il frontend per la produzione"
@@ -42,3 +45,6 @@ test:
 
 test-db:
 	GRADIENT_TEST_DB=1 $(UV) run python -m pytest -m database
+
+docker-build:
+	$(DOCKER) build --tag $(IMAGE) .

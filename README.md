@@ -12,7 +12,7 @@ Il progetto è nella fase di definizione dei requisiti. Le scelte tecniche conco
 - **GraphQL con Strawberry** per l'API;
 - **React con Vite** per il frontend.
 
-Gli strumenti di sviluppo concordati sono **uv** per dipendenze e ambiente Python, **npm** per il frontend, un **Makefile** per i comandi comuni e **Docker** per l'immagine di deploy. Il frontend usa TypeScript. La preparazione dell'immagine e i relativi comandi devono ancora essere implementati.
+Gli strumenti di sviluppo concordati sono **uv** per dipendenze e ambiente Python, **npm** per il frontend, un **Makefile** per i comandi comuni e **Docker** per l'immagine di deploy. Il frontend usa TypeScript. Il Dockerfile costruisce un’immagine di produzione con frontend e backend sulla stessa origine.
 
 Le altre librerie e le modalità di distribuzione sono ancora da confermare. È previsto un utilizzo ridotto, con pochissimi utenti; il contenimento del consumo di RAM sul server è un obiettivo progettuale.
 
@@ -183,11 +183,11 @@ Questo file descrive il progetto e le decisioni funzionali concordate. Le istruz
 
 Il primo flusso applicativo consente di creare corsi, tabelle e righe studente e consultarli tramite GraphQL e interfaccia React. Le righe hanno ID stabili, matricole facoltative e nome/cognome locali alla tabella. L'importazione iniziale CSV è implementata con anteprima, associazione delle colonne e salvataggio atomico. La migrazione `0003` aggiunge email e flag DSA/DIS alle righe esistenti, inizialmente vuoti/off. Il login Google/UniPi, le sessioni e l’isolamento dei corsi per proprietario sono implementati con la migrazione `0004`. Colonne custom, voti e formule non sono ancora implementati.
 
-Stato delle verifiche al 19 novembre 2026: passati 58 test senza database e 7 test su MariaDB, controllo dei tipi, compatibilità delle dipendenze e build frontend. La migrazione fino a `0004` è stata applicata al database locale e `alembic check` non rileva differenze rispetto ai modelli. Verificati in precedenza nel browser caricamento, anteprima, importazione dei 14 studenti fittizi e permanenza dei dati dopo il ricaricamento. I nuovi flussi OAuth sono verificati con provider simulati; il login reale Google/UniPi richiede ancora credenziali e callback registrate. I test MariaDB verificano sessioni reali, separazione degli account con la stessa email, isolamento dei corsi, logout e scadenza.
+Stato delle verifiche al 20 novembre 2026: passati 71 test senza database, controllo dei tipi, compatibilità delle dipendenze e build frontend. I 7 test su MariaDB sono passati nella verifica precedente del login. Costruita e avviata l’immagine Docker: verificati utente non root, migrazioni incluse, frontend, asset, controllo di salute e protezione GraphQL, senza connessione al database. La migrazione fino a `0004` è stata applicata al database locale e `alembic check` non rileva differenze rispetto ai modelli. Verificati in precedenza nel browser caricamento, anteprima, importazione dei 14 studenti fittizi e permanenza dei dati dopo il ricaricamento. I nuovi flussi OAuth sono verificati con provider simulati; il login reale Google/UniPi richiede ancora credenziali e callback registrate. I test MariaDB verificano sessioni reali, separazione degli account con la stessa email, isolamento dei corsi, logout e scadenza.
 
 Le dipendenze Python sono in `pyproject.toml` e `uv.lock`; il frontend React/Vite è in `frontend/`, con il proprio lockfile npm. I modelli e il backend sono nel pacchetto `gradient/`, le migrazioni in `migrations/`. Il pool del backend ha un massimo di due connessioni per processo.
 
-Prerequisiti: Python 3.14, uv e Node.js compatibile con la versione di Vite installata. Per questa inizializzazione sono stati usati Python 3.14.4 e Node.js 22.23.4. Docker e Make servono rispettivamente per le future immagini e per i comandi comuni.
+Prerequisiti: Python 3.14, uv e Node.js compatibile con la versione di Vite installata. Per questa inizializzazione sono stati usati Python 3.14.4 e Node.js 22.23.4. Docker e Make servono rispettivamente per l’immagine di produzione e per i comandi comuni.
 
 Se uv è installato in `~/.local/bin` ma non è nel PATH del terminale corrente, eseguire:
 
@@ -207,7 +207,7 @@ make backend  # FastAPI su http://127.0.0.1:8000
 make dev      # frontend; aprire l'indirizzo indicato da Vite
 ```
 
-Non è necessario attivare manualmente `.venv`: i comandi Python del progetto si eseguono tramite `uv run`. Il Makefile consente di sovrascrivere `UV` e `NPM` se gli eseguibili sono installati in percorsi differenti. Le migrazioni vengono eseguite esplicitamente, mai all'avvio del server.
+Non è necessario attivare manualmente `.venv`: i comandi Python del progetto si eseguono tramite `uv run`. Il Makefile consente di sovrascrivere `UV` e `NPM` se gli eseguibili sono installati in percorsi differenti. Le migrazioni locali vengono eseguite esplicitamente; il container consente di abilitarle all’avvio con `GRADIENT_AUTO_MIGRATE=true`.
 
 Vite inoltra `/graphql` e `/auth` al backend locale, senza richiedere configurazioni CORS. Per provare il flusso, configurare almeno un provider, accedere, creare un corso, una tabella e uno studente e ricaricare la pagina. Tutte le richieste GraphQL richiedono una sessione autenticata; le POST richiedono l'intestazione `X-Gradient-Request: 1`. L'editor GraphQL può essere aperto tramite l'origine frontend dopo il login, configurando questa intestazione. Anche il logout richiede una POST con la stessa intestazione. Non è previsto un accesso anonimo di sviluppo.
 
@@ -242,6 +242,54 @@ make test-db  # integrazione sulla MariaDB configurata, dopo make migrate
 I test di integrazione creano corsi temporanei e rimuovono soltanto i propri dati al termine. Verificano persistenza tra istanze dell'applicazione, unicità delle matricole per tabella, più matricole mancanti e indipendenza dei nomi tra tabelle. Non creano né avviano database. Utilizzare un database di sviluppo.
 
 Gli ambienti locali, `node_modules`, i risultati delle compilazioni e i file `.env` sono esclusi dal versionamento. I lockfile vanno invece conservati in Git.
+
+### Produzione con Docker
+
+Il [Dockerfile](Dockerfile) compila il frontend con Node e installa le dipendenze Python con `uv sync --locked --no-dev`. L'immagine finale contiene Python 3.14, ambiente virtuale, codice backend, migrazioni e frontend compilato; non contiene Node, dipendenze di sviluppo o configurazione locale. Il processo gira con UID/GID 10001, senza privilegi root, sulla porta 8000. Un singolo worker Uvicorn contiene il consumo di RAM e mantiene il pool a un massimo di due connessioni database.
+
+```bash
+make docker-build                         # gradient:latest
+# Oppure un tag scelto per il rilascio:
+make docker-build IMAGE=gradient:1.0
+```
+
+Preparare sul server un file `.env.production` con le variabili di [.env.example](.env.example), credenziali effettive e un `AUTH_SECRET` casuale persistente. Impostare `AUTH_BASE_URL=https://gradient.example.org` e registrare le due callback OAuth su questa origine. Passare la configurazione soltanto all'esecuzione con `--env-file`: i file `.env*`, l'ambiente Python locale e gli output frontend locali sono esclusi dal contesto di build.
+
+MariaDB deve essere già disponibile. Nell'esempio seguente `app-network` è una rete Docker esistente condivisa con il database, e `DB_HOST` deve essere il nome DNS del relativo servizio/container, con `DB_PORT=3306`. `127.0.0.1` dentro il container identifica il container stesso. Si può usare anche un database esterno raggiungibile dalla rete del container, configurandone host e porta.
+
+Prima di avviare la nuova versione, eseguire le migrazioni con la stessa immagine e configurazione:
+
+```bash
+docker run --rm --env-file .env.production --network app-network \
+  gradient:latest alembic upgrade head
+
+docker run -d --name gradient --restart unless-stopped \
+  --env-file .env.production --network app-network \
+  -p 127.0.0.1:8000:8000 gradient:latest
+```
+
+In alternativa al comando di migrazione separato, impostare `GRADIENT_AUTO_MIGRATE=true` in `.env.production` oppure aggiungere `-e GRADIENT_AUTO_MIGRATE=true` a `docker run`. L'entrypoint esegue `alembic upgrade head` prima di Uvicorn e avvia il server soltanto se la migrazione riesce. Il valore predefinito è `false`; sono accettati anche `1`/`0` e `TRUE`/`FALSE`. Un valore diverso interrompe l'avvio con un messaggio di configurazione. La variabile è letta dall'ambiente del container, non dal file `.env` tramite pydantic-settings.
+
+Le migrazioni automatiche si applicano soltanto quando il comando da avviare è `uvicorn`. I comandi manuali, incluso `alembic upgrade head`, vengono eseguiti direttamente, anche se la variabile è abilitata. In caso di più container applicativi, eseguire la migrazione una sola volta come passo separato, evitando avvii concorrenti con migrazioni automatiche.
+
+L'immagine non crea database o utenti MariaDB. I dati persistono nel database; il container applicativo non richiede volumi. Il comando `alembic upgrade head` sostituisce il comando di avvio predefinito.
+
+Pubblicare l'intera applicazione dietro un reverse proxy HTTPS che inoltri tutte le richieste alla porta 8000: `/` e `/assets` servono React, `/auth` gestisce il login e `/graphql` l'API. Se il proxy è un altro container, collegarlo alla stessa rete e usare `gradient:8000`; in quel caso la pubblicazione della porta sull'host è facoltativa. Il proxy deve preservare l'header `Origin` e non memorizzare in cache le risposte autenticate. Le intestazioni proxy non sono considerate da Uvicorn: URL OAuth e sicurezza dei cookie dipendono da `AUTH_BASE_URL`, configurato esplicitamente. I log di accesso Uvicorn sono disabilitati per evitare di registrare i codici nelle query delle callback; configurare allo stesso modo il proxy per `/auth/callback/`.
+
+Il controllo Docker interroga `GET /healthz`, che verifica la risposta del processo senza accedere al database. Uno stato healthy non garantisce la raggiungibilità di MariaDB, lo stato delle migrazioni o la configurazione OAuth. In sviluppo, se `frontend/dist` non esiste, il backend espone soltanto API e controllo di salute; continuare a usare Vite con `make dev`.
+
+### Pubblicazione automatica su Docker Hub
+
+Il workflow [.github/workflows/docker.yml](.github/workflows/docker.yml) costruisce e pubblica l'immagine a ogni push sul branch `main`. La versione del codice è `project.version` in `pyproject.toml`, attualmente `0.1.0`. Il workflow legge questo campo e pubblica la stessa build con entrambi i tag:
+
+- `paolini/gradient:v0.1.0` (oppure `v1.2.3` quando la versione del codice sarà `1.2.3`);
+- `paolini/gradient:main`.
+
+La versione deve avere il formato `X.Y.Z`; una versione non valida interrompe il workflow prima della pubblicazione. Aggiornare la versione in `pyproject.toml` e il relativo `uv.lock` per ogni nuovo rilascio. Push successivi con la stessa versione aggiornano anche il relativo tag versionato; non sono tag immutabili. Il tag `main` segue l'ultima build pubblicata del branch. La piattaforma costruita è `linux/amd64`.
+
+Configurare in GitHub, **Settings → Secrets and variables → Actions**, i repository secret `DOCKERHUB_USERNAME` (utente con accesso al repository Docker Hub `paolini/gradient`) e `DOCKERHUB_TOKEN` (token Docker Hub con permesso di scrittura). Nessuna credenziale è contenuta nel workflow. Le action sono fissate a commit specifici; Buildx utilizza la cache di GitHub Actions. Il flusso segue le [action ufficiali Docker](https://docs.docker.com/build/ci/github-actions/).
+
+La pubblicazione effettiva richiede che questi file, incluso il Dockerfile, siano presenti su `main` e che i secret siano configurati. Il workflow non distribuisce né riavvia l'applicazione sul server.
 
 ### MariaDB nello sviluppo locale
 

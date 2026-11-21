@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
 
 import secrets
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -42,7 +44,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             check_origin(request)
         return {"store": Store(request.app.state.store.database, user.id), "user": user}
 
+    @application.get("/healthz", include_in_schema=False)
+    async def health():
+        # Liveness del processo: non apre connessioni e non esegue migrazioni.
+        return {"status": "ok"}
+
     application.include_router(GraphQLRouter(schema, context_getter=context, allow_queries_via_get=False), prefix="/graphql")
+    frontend = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+    if frontend.is_dir():
+        application.mount("/", StaticFiles(directory=frontend, html=True), name="frontend")
     return application
 
 
