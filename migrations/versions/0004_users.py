@@ -17,11 +17,13 @@ def upgrade():
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("last_login", sa.DateTime(), nullable=False),
-        sa.UniqueConstraint("provider", "subject", name="uq_users_provider_subject"))
+        sa.UniqueConstraint("provider", "subject", name="uq_users_provider_subject"),
+        mysql_engine="InnoDB", mysql_charset="utf8mb4")
     op.create_table("login_sessions",
         sa.Column("token_hash", sa.String(64), primary_key=True),
         sa.Column("user_id", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column("expires_at", sa.DateTime(), nullable=False))
+        sa.Column("expires_at", sa.DateTime(), nullable=False),
+        mysql_engine="InnoDB", mysql_charset="utf8mb4")
     op.create_index("ix_login_sessions_user_id", "login_sessions", ["user_id"])
     op.create_index("ix_login_sessions_expires_at", "login_sessions", ["expires_at"])
     op.add_column("courses", sa.Column("owner_id", sa.String(36), nullable=True))
