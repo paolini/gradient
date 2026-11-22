@@ -1,0 +1,13 @@
+.git
+.cpcache
+.shadow-cljs
+target
+data
+**/node_modules
+frontend/public/js
+.env
+.env.*
+!.env.example
+test
+dev
+examples

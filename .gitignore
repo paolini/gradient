@@ -1,0 +1,24 @@
+# Clojure
+.cpcache/
+.nrepl-port
+target/
+.lsp/
+.clj-kondo/.cache/
+
+# Datomic Local
+data/
+
+# Frontend
+node_modules/
+.shadow-cljs/
+frontend/public/js/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Editor and operating system
+.idea/
+.calva/
+.DS_Store

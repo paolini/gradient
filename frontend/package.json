@@ -1,0 +1,17 @@
+{
+  "name": "gradient-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "shadow-cljs watch app",
+    "build": "shadow-cljs release app",
+    "check": "shadow-cljs compile app"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "shadow-cljs": "3.5.14"
+  }
+}

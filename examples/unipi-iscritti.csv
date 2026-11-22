@@ -1,0 +1,24 @@
+﻿sep=;
+Codice: ;632AA;CFU: ;15;
+Insegnamento: ;ANALISI MATEMATICA (B);
+Tipo prova: ;orale;
+Data Esame: ;04/05/2026;Ora Esame: ;09:00;
+Num. Iscritti: ;14;
+Lista ordinata: ;per iscrizione;
+
+
+Matricola;Cognome;Nome;Email;Cds;Programma;Note studente;Data e ora iscrizione;Cancellazioni;Note di sistema;userid;Documentazione studente
+FITTIZIA000001;CognomeFittizio0001;NomeFittizio0001;studente0001@example.invalid;FISR-L;2025/26;;08/04/2026 07:40;0;;n.cognomefittizio0001;
+FITTIZIA000002;CognomeFittizio0002;NomeFittizio0002;studente0002@example.invalid;FIS-L;2025/26;Preferenza per la data indicata nell’appello (nota fittizia).;10/04/2026 11:49;0;;n.cognomefittizio0002;
+FITTIZIA000003;CognomeFittizio0003;NomeFittizio0003;studente0003@example.invalid;FISR-L;2025/26;Preferenza per la data indicata nell’appello (nota fittizia).;10/04/2026 12:05;0;;n.cognomefittizio0003;
+FITTIZIA000004;CognomeFittizio0004;NomeFittizio0004;studente0004@example.invalid;FISR-L;2025/26;;12/04/2026 12:33;0;DSA-;n.cognomefittizio0004;
+FITTIZIA000005;CognomeFittizio0005;NomeFittizio0005;studente0005@example.invalid;FIS-L;2025/26;Preferenza per la data indicata nell’appello (nota fittizia).;14/04/2026 08:30;0;;n.cognomefittizio0005;
+FITTIZIA000006;CognomeFittizio0006;NomeFittizio0006;studente0006@example.invalid;FISR-L;2025/26;Preferenza per la data indicata nell’appello (nota fittizia).;16/04/2026 16:21;1;;n.cognomefittizio0006;
+FITTIZIA000007;CognomeFittizio0007;NomeFittizio0007;studente0007@example.invalid;FISR-L;2025/26;;21/04/2026 16:43;0;;n.cognomefittizio0007;
+FITTIZIA000008;CognomeFittizio0008;NomeFittizio0008;studente0008@example.invalid;FISR-L;2025/26;Preferenza per la data indicata nell’appello (nota fittizia).;23/04/2026 12:32;0;;n.cognomefittizio0008;
+FITTIZIA000009;CognomeFittizio0009;NomeFittizio0009;studente0009@example.invalid;FIS-L;2025/26;Preferenza per la data indicata nell’appello (nota fittizia).;24/04/2026 20:22;0;;n.cognomefittizio0009;
+FITTIZIA000010;CognomeFittizio0010;NomeFittizio0010;studente0010@example.invalid;FISR-L;2025/26;Preferenza per la data indicata nell’appello (nota fittizia).;25/04/2026 10:13;0;;n.cognomefittizio0010;
+FITTIZIA000011;CognomeFittizio0011;NomeFittizio0011;studente0011@example.invalid;FISR-L;2025/26;Preferenza per la data indicata nell’appello (nota fittizia).;25/04/2026 21:50;0;;n.cognomefittizio0011;
+FITTIZIA000012;CognomeFittizio0012;NomeFittizio0012;studente0012@example.invalid;FISR-L;2025/26;;29/04/2026 08:53;0;;n.cognomefittizio0012;
+FITTIZIA000013;CognomeFittizio0013;NomeFittizio0013;studente0013@example.invalid;FISR-L;2025/26;Preferenza per la data indicata nell’appello (nota fittizia).;29/04/2026 12:05;0;;n.cognomefittizio0013;
+FITTIZIA000014;CognomeFittizio0014;NomeFittizio0014;studente0014@example.invalid;FIS-L;2025/26;Preferenza per la data indicata nell’appello (nota fittizia).;01/05/2026 11:59;0;DSA-;n.cognomefittizio0014;

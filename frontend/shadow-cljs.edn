@@ -1,0 +1,9 @@
+{:source-paths ["src"]
+ :dependencies [[reagent/reagent "2.0.1"]]
+ ;; In sviluppo serve public/ su 5173 e inoltra al backend le richieste che non sono file.
+ :dev-http {5173 {:root "public" :host "127.0.0.1" :proxy-url "http://127.0.0.1:8000"}}
+ :builds {:app {:target :browser
+                :output-dir "public/js"
+                :asset-path "/js"
+                :modules {:main {:init-fn gradient.ui.main/init}}
+                :release {:compiler-options {:infer-externs :auto}}}}}
