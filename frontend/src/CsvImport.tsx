@@ -83,9 +83,8 @@ export default function CsvImport({ courseId, disabled, onBusy, onCreated }: {
     finally { setBusy(false); onBusy(false); }
   }
 
-  return <section className="csv-import">
-    <h2>Nuova tabella da CSV</h2><p>Carica gli iscritti, verifica le colonne e crea una nuova tabella nel corso selezionato.</p>
-    {!courseId && <p>Seleziona prima un corso.</p>}
+  return <div className="csv-import">
+    <p>Carica gli iscritti scaricati dal sito di ateneo, verifica le colonne e crea una nuova tabella nel corso.</p>
     {error && <p role="alert" className="error">{error}</p>}
     <fieldset disabled={!courseId || disabled || busy}>
       <label>File CSV degli iscritti<input key={filename || 'empty'} type="file" accept=".csv,text/csv" onChange={event => { void upload(event.target.files?.[0]); }} /></label>
@@ -114,5 +113,5 @@ export default function CsvImport({ courseId, disabled, onBusy, onCreated }: {
         <button>Crea tabella e importa {preview.totalRows} studenti</button>
       </fieldset></form>
     </>}
-  </section>;
+  </div>;
 }

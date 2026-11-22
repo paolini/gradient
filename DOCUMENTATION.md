@@ -57,7 +57,7 @@ Non unire automaticamente studenti con matricole differenti sulla base di nome e
 
 Nel workflow descritto per UniPi, gli studenti si registrano agli esami sul sito di ateneo e il docente scarica l'elenco degli iscritti in formato CSV.
 
-L'importazione iniziale è implementata nel riquadro **Nuova tabella da CSV**. Selezionare un corso, caricare il file e controllare l'anteprima. L'applicazione riconosce le intestazioni UniPi anche dopo le righe introduttive; le associazioni delle colonne possono essere modificate prima del salvataggio. È possibile indicare nome, data e luogo della nuova tabella.
+L'importazione iniziale è implementata nella pagina del corso, con il pulsante **Importa da CSV**. Caricare il file e controllare l'anteprima. L'applicazione riconosce le intestazioni UniPi anche dopo le righe introduttive; le associazioni delle colonne possono essere modificate prima del salvataggio. È possibile indicare nome, data e luogo della nuova tabella.
 
 Vengono importati matricola, nome, cognome, email e i due flag indipendenti DSA/DIS. Le altre colonne e le informazioni introduttive non vengono memorizzate; le righe non vengono filtrate automaticamente in base alla colonna «Cancellazioni». DSA e DIS possono leggere colonne distinte, «Documentazione studente» o «Note di sistema»: l'associazione automatica cerca le sigle nelle due colonne e privilegia eventuali colonne DSA/DIS esplicite. Sono riconosciuti vuoto/no/off/0, sì/x/on/1 e le sigle DSA/DIS, anche combinate. Valori non riconosciuti vengono segnalati, senza indovinarne il significato. Delle note associate ai flag viene conservato soltanto il valore booleano, non il testo.
 
