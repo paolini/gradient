@@ -79,13 +79,47 @@ Per le prove a risposta multipla, un codice compito identifica la variante e per
 
 L'interfaccia deve favorire l'inserimento rapido da tastiera e il lavoro su una griglia simile a un foglio di calcolo. Le interazioni precise saranno definite durante la progettazione.
 
+### Tipi di colonna
+
+Decisioni concordate:
+
+- non esiste un tipo numerico distinto dal voto. Anche i punteggi dei singoli esercizi sono colonne di tipo voto, con il tipo di dato descritto più avanti; la configurazione della colonna stabilisce scala e modificatori ammessi;
+- le colonne flag, come presente o consegna, hanno tre stati: sì, no e vuoto. Il vuoto rappresenta un dato non inserito e non equivale a «no». Questa regola non si applica a DSA e DIS, dove la cella vuota rappresenta off;
+- ogni cella può essere vuota. Il vuoto è il valore mancante, unico per tutti i tipi di colonna: una cella vuota non esiste, mentre una cella presente ha sempre un valore (un flag sì o no, un voto con valore base, un testo non vuoto). Un testo vuoto o composto da soli spazi equivale a una cella vuota. Svuotare una cella significa eliminarla;
+- matricola, cognome, nome ed email restano colonne distinte, senza una colonna «studente» unica;
+- ogni colonna, comprese quelle anagrafiche e DSA/DIS, può essere nascosta e riordinata.
+
+Proposta in discussione, non ancora approvata né implementata:
+
+- **flag**, per esempio presente o consegna;
+- **voto**, per voti e punteggi degli esercizi;
+- **testo**, per note libere;
+- **codice compito**, che identifica la variante;
+- **blocco a risposta multipla**: una cella per studente con la stringa delle risposte (per esempio `ABDC-E`, con `-` per la risposta vuota), visualizzabile per domanda, e una chiave delle risposte corrette per ciascun codice compito;
+- **calcolata**, con una formula che fa riferimento alle colonne per nome e viene valutata dal server.
+
+La proposta prevede definizioni delle colonne per tabella, con posizione, nome, tipo e configurazione, e celle memorizzate separatamente per coppia riga/colonna. Prevede inoltre l'aggiunta di più colonne di esercizi in un'unica operazione e la copia della struttura delle colonne da un'altra tabella.
+
+Questioni aperte:
+
+- se le varianti a risposta multipla hanno chiavi indipendenti o sono permutazioni di un compito base;
+- se i punteggi della risposta multipla (giusta, sbagliata, vuota) sono uniformi o pesati per domanda;
+- sintassi delle formule e valutazione esclusivamente lato server.
+
 ## Riepilogo del corso
 
 Ogni corso deve avere una tabella riassuntiva non associata a una prova. Le sue colonne sono configurabili: il docente può scegliere quali risultati delle prove includere, in quale ordine, e aggiungere colonne personalizzate e calcolate, per esempio la media di tre compitini. Non è obbligatoria una colonna per ogni prova. È prevista la possibilità di aggiungere rapidamente colonne collegate ai risultati delle prove; i dettagli dell'interazione restano da definire.
 
 I risultati delle prove devono alimentare il riepilogo senza richiedere di reinserire i voti. Il criterio con cui una prova espone il proprio risultato al riepilogo è ancora da definire.
 
-Si distinguono colonne con dati inseriti direttamente, colonne collegate ad altre tabelle tramite matricola e colonne calcolate. Rimuovere una colonna collegata dal riepilogo non elimina la prova di origine. Anche nome e cognome nel riepilogo sono locali alla tabella; la loro inizializzazione resta da definire.
+Si distinguono colonne con dati inseriti direttamente, colonne collegate ad altre tabelle tramite matricola e colonne calcolate. Rimuovere una colonna collegata dal riepilogo non elimina la prova di origine.
+
+Il riepilogo è anche l'elenco degli studenti del corso. Decisioni concordate:
+
+- le righe sono automatiche: compare ogni matricola presente in almeno una tabella del corso. Aggiungere uno studente a una prova lo aggiunge al riepilogo. Le righe senza matricola non possono essere collegate e vengono mostrate a parte come «da identificare»;
+- nome e cognome nel riepilogo sono presi dalla prova più recente in cui compare la matricola e non si modificano nel riepilogo: si correggono nella prova. Questo non sincronizza i dati tra le tabelle delle prove.
+
+La prova più recente si stabilisce con la data della tabella; per le tabelle senza data si usa la data di creazione. Restano da definire il trattamento dell'email e l'eventuale aggiunta manuale di righe al riepilogo.
 
 ### Flag DSA e DIS
 
