@@ -2,12 +2,50 @@ import re
 from datetime import date as DateValue
 from uuid import UUID
 
-from sqlalchemy import select
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
+from gradient.cells import (
+    BUILTIN_KINDS, BUILTIN_NAMES, CUSTOM_KINDS, CellError, GradeScale,
+    grade_violation, parse_decimal, parse_flag, parse_grade, parse_text,
+)
 from gradient.database import Database
-from gradient.models import Course, CourseTable, StudentRow, new_id
+from gradient.models import Cell, Course, CourseTable, StudentRow, TableColumn, TableView, new_id
 from gradient.csv_import import Preview
+
+DEFAULT_SORT = [{"column": "last_name", "descending": False}, {"column": "first_name", "descending": False}]
+
+
+DEFAULT_VIEW_NAME = "Predefinita"
+
+
+@dataclass
+class View:
+    id: str | None  # None per la vista predefinita non ancora salvata
+    name: str
+    column_order: list[str]
+    hidden_columns: list[str]
+    row_sort: list[dict]
+    active: bool
+
+
+def builtin_columns(table_id: str) -> list[TableColumn]:
+    return [
+        TableColumn(id=new_id(), table_id=table_id, position=position, kind=kind, name=BUILTIN_NAMES[kind], config=None)
+        for position, kind in enumerate(BUILTIN_KINDS)
+    ]
+
+
+def now() -> datetime:
+    # Le colonne DateTime sono senza fuso orario: si memorizza l'ora UTC.
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def duplicate_key(error: IntegrityError) -> bool:
+    return bool(error.orig.args) and error.orig.args[0] == 1062
 
 
 class InputError(Exception):
@@ -52,13 +90,32 @@ class Store:
         table_id = identifier(table_id, "tableId")
         async with self.database.sessions() as session:
             await self.require(session, CourseTable, table_id, "tableId")
-            return list(await session.scalars(select(StudentRow).where(StudentRow.table_id == table_id).order_by(StudentRow.last_name, StudentRow.first_name, StudentRow.id)))
+            rows = list(await session.scalars(select(StudentRow).where(StudentRow.table_id == table_id).order_by(StudentRow.last_name, StudentRow.first_name, StudentRow.id)))
+            cells = await session.scalars(select(Cell).join(StudentRow, Cell.row_id == StudentRow.id).where(StudentRow.table_id == table_id))
+            by_row: dict[str, list[Cell]] = {}
+            for cell in cells:
+                by_row.setdefault(cell.row_id, []).append(cell)
+            return [(row, by_row.get(row.id, [])) for row in rows]
+
+    async def columns(self, table_id: str):
+        table_id = identifier(table_id, "tableId")
+        async with self.database.sessions() as session:
+            await self.require(session, CourseTable, table_id, "tableId")
+            return await self.load_columns(session, table_id)
+
+    async def load_columns(self, session, table_id: str) -> list[TableColumn]:
+        return list(await session.scalars(select(TableColumn).where(TableColumn.table_id == table_id).order_by(TableColumn.position, TableColumn.id)))
 
     async def require(self, session, model, entity_id: str, field: str):
         entity = await session.get(model, entity_id)
-        course = entity if model is Course else await session.get(Course, entity.course_id) if entity else None
+        if entity is not None and model in (StudentRow, TableColumn):
+            table = await session.get(CourseTable, entity.table_id)
+            course = await session.get(Course, table.course_id) if table else None
+        else:
+            course = entity if model is Course else await session.get(Course, entity.course_id) if entity else None
         if course is None or course.owner_id != self.user_id:
             raise InputError(field, "Elemento non trovato.", "NOT_FOUND")
+        return entity
 
     async def create_course(self, name: str, academic_year: str, degree_program: str | None = None):
         name = text(name, "name")
@@ -80,12 +137,14 @@ class Store:
     async def create_table(self, course_id: str, name: str, date: DateValue | None = None, location: str | None = None):
         course_id = identifier(course_id, "courseId")
         table = CourseTable(
-            course_id=course_id, name=text(name, "name"), date=date,
+            id=new_id(), course_id=course_id, name=text(name, "name"), date=date,
             location=text(location or "", "location", required=False) or None,
         )
         async with self.database.sessions.begin() as session:
             await self.require(session, Course, course_id, "courseId")
             session.add(table)
+            for column in builtin_columns(table.id):
+                session.add(column)
         return table
 
     async def add_student(self, table_id: str, matricola: str | None, first_name: str, last_name: str):
@@ -101,10 +160,10 @@ class Store:
                 await self.require(session, CourseTable, table_id, "tableId")
                 session.add(row)
         except IntegrityError as error:
-            if error.orig.args[0] == 1062:
+            if duplicate_key(error):
                 raise InputError("matricola", "Matricola già presente in questa tabella.", "DUPLICATE_MATRICOLA") from None
             raise
-        return row
+        return row, []
 
     async def import_table(self, course_id: str, name: str, date: DateValue | None, location: str | None, preview: Preview):
         if preview.errors or not preview.rows:
@@ -118,6 +177,7 @@ class Store:
             await self.require(session, Course, course_id, "courseId")
             session.add(table)
             await session.flush()
+            session.add_all(builtin_columns(table.id))
             session.add_all([
                 StudentRow(
                     table_id=table.id, matricola=row.matricola,
@@ -126,3 +186,224 @@ class Store:
                 ) for row in preview.rows
             ])
         return table
+
+    # Colonne
+
+    def grade_scale(self, data: dict | None) -> GradeScale:
+        data = data or {}
+        try:
+            maximum = parse_decimal(data["maximum"], "Il massimo") if data.get("maximum") not in (None, "") else None
+            threshold = parse_decimal(data["pass_threshold"], "La sufficienza") if data.get("pass_threshold") not in (None, "") else None
+        except CellError as error:
+            raise InputError("grade", str(error)) from None
+        if maximum is not None and maximum <= 0:
+            raise InputError("grade", "Il massimo deve essere maggiore di zero.")
+        modifiers = data.get("modifiers") or []
+        if any(modifier not in ("+", "-", "L") for modifier in modifiers):
+            raise InputError("grade", "Sono ammessi soltanto i modificatori +, - e L.")
+        return GradeScale(maximum, bool(data.get("allow_above_maximum")), bool(data.get("allow_negative")), threshold, list(modifiers))
+
+    async def add_column(self, table_id: str, kind: str, name: str, grade: dict | None = None):
+        table_id = identifier(table_id, "tableId")
+        if kind not in CUSTOM_KINDS:
+            raise InputError("kind", "Tipo di colonna non valido.")
+        name = text(name, "name", 100)
+        config = self.grade_scale(grade).to_json() if kind == "grade" else None
+        try:
+            async with self.database.sessions.begin() as session:
+                await self.require(session, CourseTable, table_id, "tableId")
+                last = await session.scalar(select(func.max(TableColumn.position)).where(TableColumn.table_id == table_id))
+                column = TableColumn(id=new_id(), table_id=table_id, position=(last if last is not None else -1) + 1, kind=kind, name=name, config=config)
+                session.add(column)
+        except IntegrityError as error:
+            if duplicate_key(error):
+                raise InputError("name", "Esiste già una colonna con questo nome.", "DUPLICATE_NAME") from None
+            raise
+        return column
+
+    async def update_column(self, column_id: str, name: str | None = None, grade: dict | None = None):
+        column_id = identifier(column_id, "columnId")
+        try:
+            async with self.database.sessions.begin() as session:
+                column = await self.require(session, TableColumn, column_id, "columnId")
+                if name is not None:
+                    column.name = text(name, "name", 100)
+                if grade is not None:
+                    if column.kind != "grade":
+                        raise InputError("grade", "La scala si configura soltanto nelle colonne voto.")
+                    scale = self.grade_scale(grade)
+                    cells = await session.scalars(select(Cell).where(Cell.column_id == column_id))
+                    invalid = [cell for cell in cells if grade_violation(cell.grade_base, cell.grade_modifier, scale)]
+                    if invalid:
+                        raise InputError("grade", f"{len(invalid)} voti già inseriti non rispettano la nuova configurazione.", "INVALID_EXISTING_VALUES")
+                    column.config = scale.to_json()
+        except IntegrityError as error:
+            if duplicate_key(error):
+                raise InputError("name", "Esiste già una colonna con questo nome.", "DUPLICATE_NAME") from None
+            raise
+        return column
+
+    async def delete_column(self, column_id: str):
+        column_id = identifier(column_id, "columnId")
+        async with self.database.sessions.begin() as session:
+            column = await self.require(session, TableColumn, column_id, "columnId")
+            if column.kind in BUILTIN_KINDS:
+                raise InputError("columnId", "Le colonne anagrafiche non possono essere eliminate; è possibile nasconderle.")
+            await session.execute(delete(Cell).where(Cell.column_id == column_id))
+            await session.delete(column)
+        return column
+
+    # Celle
+
+    async def set_cell(self, row_id: str, column_id: str, value: str):
+        row_id = identifier(row_id, "rowId")
+        column_id = identifier(column_id, "columnId")
+        try:
+            async with self.database.sessions.begin() as session:
+                row = await self.require(session, StudentRow, row_id, "rowId")
+                column = await self.require(session, TableColumn, column_id, "columnId")
+                if column.table_id != row.table_id:
+                    raise InputError("columnId", "La colonna non appartiene alla tabella della riga.", "NOT_FOUND")
+                try:
+                    if column.kind in BUILTIN_KINDS:
+                        self.set_builtin(row, column.kind, value)
+                    else:
+                        await self.set_custom(session, row_id, column, value)
+                except CellError as error:
+                    raise InputError("value", str(error)) from None
+                await session.flush()
+                cells = list(await session.scalars(select(Cell).where(Cell.row_id == row_id)))
+        except IntegrityError as error:
+            if duplicate_key(error):
+                raise InputError("value", "Matricola già presente in questa tabella.", "DUPLICATE_MATRICOLA") from None
+            raise
+        return row, cells
+
+    @staticmethod
+    def set_builtin(row: StudentRow, kind: str, value: str):
+        if kind == "matricola":
+            row.matricola = parse_text(value, 64)
+        elif kind in ("first_name", "last_name"):
+            setattr(row, kind, parse_text(value, 200) or "")
+        elif kind == "email":
+            row.email = parse_text(value, 320)
+        else:
+            setattr(row, kind, parse_flag(value, allow_empty=False))
+
+    @staticmethod
+    async def set_custom(session, row_id: str, column: TableColumn, value: str):
+        cell = await session.get(Cell, (row_id, column.id))
+        values: dict = {"flag": None, "grade_base": None, "grade_modifier": "", "text_value": None}
+        if column.kind == "flag":
+            values["flag"] = parse_flag(value)
+            empty = values["flag"] is None
+        elif column.kind == "grade":
+            grade = parse_grade(value, GradeScale.from_json(column.config))
+            empty = grade is None
+            if grade:
+                values["grade_base"], values["grade_modifier"] = grade
+        else:
+            values["text_value"] = parse_text(value)
+            empty = values["text_value"] is None
+        if empty:
+            # La cella vuota non esiste.
+            if cell is not None:
+                await session.delete(cell)
+            return
+        if cell is None:
+            session.add(Cell(row_id=row_id, column_id=column.id, **values))
+        else:
+            for key, item in values.items():
+                setattr(cell, key, item)
+
+    # Viste personali
+
+    async def views(self, table_id: str) -> list[View]:
+        """Viste dell'utente; senza viste salvate ne restituisce una predefinita non memorizzata."""
+        table_id = identifier(table_id, "tableId")
+        async with self.database.sessions() as session:
+            await self.require(session, CourseTable, table_id, "tableId")
+            columns = await self.load_columns(session, table_id)
+            saved = await self.saved_views(session, table_id)
+            return self.effective_views(columns, saved)
+
+    async def saved_views(self, session, table_id: str) -> list[TableView]:
+        if not self.user_id:
+            return []
+        return list(await session.scalars(select(TableView).where(TableView.user_id == self.user_id, TableView.table_id == table_id).order_by(TableView.name, TableView.id)))
+
+    def effective_views(self, columns: list[TableColumn], saved: list[TableView]) -> list[View]:
+        if not saved:
+            return [self.effective_view(columns, None, True)]
+        latest = max(saved, key=lambda view: (view.last_used, view.id))
+        return [self.effective_view(columns, view, view is latest) for view in saved]
+
+    @staticmethod
+    def effective_view(columns: list[TableColumn], saved: TableView | None, active: bool) -> View:
+        """Unisce la vista salvata con le colonne attuali: le nuove colonne vanno in fondo."""
+        ids = [column.id for column in columns]
+        known = set(ids)
+        order = [column_id for column_id in (saved.column_order if saved else []) if column_id in known]
+        order += [column_id for column_id in ids if column_id not in order]
+        hidden = [column_id for column_id in (saved.hidden_columns if saved else []) if column_id in known]
+        if saved:
+            sort = [item for item in saved.row_sort if item.get("column") in known]
+        else:
+            kinds = {column.kind: column.id for column in columns if column.kind in BUILTIN_KINDS}
+            sort = [{"column": kinds[item["column"]], "descending": item["descending"]} for item in DEFAULT_SORT if item["column"] in kinds]
+        return View(saved.id if saved else None, saved.name if saved else DEFAULT_VIEW_NAME, order, hidden, sort, active)
+
+    async def save_view(self, table_id: str, view_id: str | None, name: str, column_order: list[str], hidden_columns: list[str], row_sort: list[dict]) -> View:
+        """Crea (view_id assente) o aggiorna una vista e la rende quella in uso."""
+        table_id = identifier(table_id, "tableId")
+        if not self.user_id:
+            raise InputError("tableId", "Le viste personali richiedono un utente autenticato.")
+        name = text(name, "name", 100)
+        column_order = [identifier(item, "columnOrder") for item in column_order]
+        hidden_columns = [identifier(item, "hiddenColumns") for item in hidden_columns]
+        row_sort = [{"column": identifier(item["column"], "rowSort"), "descending": bool(item["descending"])} for item in row_sort]
+        try:
+            async with self.database.sessions.begin() as session:
+                await self.require(session, CourseTable, table_id, "tableId")
+                columns = await self.load_columns(session, table_id)
+                known = {column.id for column in columns}
+                if set(column_order) - known or set(hidden_columns) - known or {item["column"] for item in row_sort} - known:
+                    raise InputError("columnOrder", "La vista contiene colonne che non appartengono alla tabella.", "NOT_FOUND")
+                if len(set(column_order)) != len(column_order):
+                    raise InputError("columnOrder", "Colonne ripetute nell'ordine.")
+                if view_id is None:
+                    view = TableView(id=new_id(), user_id=self.user_id, table_id=table_id)
+                    session.add(view)
+                else:
+                    view = await self.require_view(session, view_id, table_id)
+                view.name, view.column_order, view.hidden_columns, view.row_sort = name, column_order, sorted(set(hidden_columns)), row_sort
+                view.last_used = now()
+                await session.flush()
+                return self.effective_view(columns, view, True)
+        except IntegrityError as error:
+            if duplicate_key(error):
+                raise InputError("name", "Esiste già una vista con questo nome.", "DUPLICATE_NAME") from None
+            raise
+
+    async def require_view(self, session, view_id: str, table_id: str | None = None) -> TableView:
+        view = await session.get(TableView, identifier(view_id, "viewId"))
+        if view is None or view.user_id != self.user_id or (table_id and view.table_id != table_id):
+            raise InputError("viewId", "Vista non trovata.", "NOT_FOUND")
+        await self.require(session, CourseTable, view.table_id, "viewId")
+        return view
+
+    async def select_view(self, view_id: str) -> View:
+        async with self.database.sessions.begin() as session:
+            view = await self.require_view(session, view_id)
+            view.last_used = now()
+            columns = await self.load_columns(session, view.table_id)
+            return self.effective_view(columns, view, True)
+
+    async def delete_view(self, view_id: str) -> list[View]:
+        async with self.database.sessions.begin() as session:
+            view = await self.require_view(session, view_id)
+            table_id = view.table_id
+            await session.delete(view)
+            await session.flush()
+            columns = await self.load_columns(session, table_id)
+            return self.effective_views(columns, await self.saved_views(session, table_id))

@@ -17,10 +17,14 @@ from gradient.services import InputError, identifier, text
 def test_exported_schema_and_frontend_operations():
     assert Path("schema.graphql").read_text() == schema.as_str() + "\n"
     source = Path("frontend/src/api.ts").read_text()
-    operations = re.findall(r"^  \w+: '(.*?)',?$", source, flags=re.MULTILINE)
-    assert len(operations) == 8
+    fragments = dict(re.findall(r"^const (\w+) = '(.*?)';$", source, flags=re.MULTILINE))
+    block = source[source.index("export const operations = {"):]
+    block = block[:block.index("\n};")]
+    operations = [match[1] for match in re.findall(r"^  \w+: (['`])(.*?)\1,?$", block, flags=re.MULTILINE)]
+    assert len(operations) == len(re.findall(r"^  \w+:", block, flags=re.MULTILINE)) == 15
     for operation in operations:
-        assert not validate(schema._schema, parse(operation))
+        operation = re.sub(r"\$\{(\w+)\}", lambda match: fragments[match[1]], operation)
+        assert not validate(schema._schema, parse(operation)), operation
 
 
 def test_settings_preserve_special_characters_in_credentials():

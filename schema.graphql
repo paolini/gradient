@@ -1,8 +1,41 @@
+input AddColumnInput {
+  tableId: ID!
+  kind: ColumnKind!
+  name: String!
+  grade: GradeScaleInput = null
+}
+
 input AddStudentInput {
   tableId: ID!
   matricola: String = null
   firstName: String! = ""
   lastName: String! = ""
+}
+
+type Cell {
+  columnId: ID!
+  display: String!
+  flag: Boolean
+  gradeBase: String
+  gradeModifier: String!
+  text: String
+}
+
+enum ColumnKind {
+  MATRICOLA
+  LAST_NAME
+  FIRST_NAME
+  EMAIL
+  DSA
+  DIS
+  FLAG
+  GRADE
+  TEXT
+}
+
+type ColumnResult {
+  column: TableColumn
+  errors: [FieldError!]!
 }
 
 type Course {
@@ -99,6 +132,22 @@ type FieldError {
   message: String!
 }
 
+type GradeScale {
+  maximum: String
+  allowAboveMaximum: Boolean!
+  allowNegative: Boolean!
+  passThreshold: String
+  modifiers: [String!]!
+}
+
+input GradeScaleInput {
+  maximum: String = null
+  allowAboveMaximum: Boolean! = false
+  allowNegative: Boolean! = false
+  passThreshold: String = null
+  modifiers: [String!]! = []
+}
+
 input ImportCsvInput {
   table: CreateTableInput!
   file: PreviewCsvInput!
@@ -110,6 +159,19 @@ type Mutation {
   createCourse(input: CreateCourseInput!): CourseResult!
   createTable(input: CreateTableInput!): TableResult!
   addStudent(input: AddStudentInput!): StudentResult!
+  addColumn(input: AddColumnInput!): ColumnResult!
+  updateColumn(input: UpdateColumnInput!): ColumnResult!
+  deleteColumn(columnId: ID!): ColumnResult!
+
+  """
+  Imposta una cella a partire dal testo digitato; il testo vuoto svuota la cella.
+  """
+  setCell(input: SetCellInput!): StudentResult!
+  saveTableView(input: SaveViewInput!): ViewResult!
+
+  """Rende la vista quella in uso per la sua tabella."""
+  selectTableView(viewId: ID!): ViewResult!
+  deleteTableView(viewId: ID!): ViewsResult!
 }
 
 input PreviewCsvInput {
@@ -122,6 +184,39 @@ type Query {
   courses: [Course!]!
   courseTables(courseId: ID!): [CourseTable!]!
   studentRows(tableId: ID!): [StudentRow!]!
+  tableColumns(tableId: ID!): [TableColumn!]!
+
+  """
+  Viste personali dell'utente: ordine e visibilità delle colonne, ordinamento delle righe.
+  """
+  tableViews(tableId: ID!): [TableView!]!
+}
+
+type RowSort {
+  columnId: ID!
+  descending: Boolean!
+}
+
+input RowSortInput {
+  columnId: ID!
+  descending: Boolean! = false
+}
+
+input SaveViewInput {
+  tableId: ID!
+
+  """Assente per creare una nuova vista."""
+  viewId: ID = null
+  name: String!
+  columnOrder: [ID!]!
+  hiddenColumns: [ID!]!
+  rowSort: [RowSortInput!]!
+}
+
+input SetCellInput {
+  rowId: ID!
+  columnId: ID!
+  value: String!
 }
 
 type StudentResult {
@@ -138,6 +233,15 @@ type StudentRow {
   email: String
   dsa: Boolean!
   dis: Boolean!
+  cells: [Cell!]!
+}
+
+type TableColumn {
+  id: ID!
+  tableId: ID!
+  kind: ColumnKind!
+  name: String!
+  grade: GradeScale
 }
 
 type TableResult {
@@ -145,9 +249,37 @@ type TableResult {
   errors: [FieldError!]!
 }
 
+type TableView {
+  """Assente per la vista predefinita non ancora salvata."""
+  id: ID
+  name: String!
+
+  """Vista in uso: l'ultima usata."""
+  active: Boolean!
+  columnOrder: [ID!]!
+  hiddenColumns: [ID!]!
+  rowSort: [RowSort!]!
+}
+
+input UpdateColumnInput {
+  columnId: ID!
+  name: String = null
+  grade: GradeScaleInput = null
+}
+
 type User {
   id: ID!
   name: String!
   email: String!
   provider: String!
+}
+
+type ViewResult {
+  view: TableView
+  errors: [FieldError!]!
+}
+
+type ViewsResult {
+  views: [TableView!]
+  errors: [FieldError!]!
 }

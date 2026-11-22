@@ -1,7 +1,9 @@
 from datetime import date as DateValue, datetime
+from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, MetaData, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, MetaData, Numeric, String, UniqueConstraint
+from sqlalchemy.dialects.mysql import DATETIME
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -72,3 +74,50 @@ class LoginSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
+class TableColumn(Base):
+    """Definizione di una colonna, comune a tutti gli utenti della tabella."""
+    __tablename__ = "table_columns"
+    __table_args__ = (UniqueConstraint("table_id", "name", name="uq_table_columns_table_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    table_id: Mapped[str] = mapped_column(ForeignKey("course_tables.id", ondelete="CASCADE"), index=True)
+    # Ordine predefinito (di creazione); l'ordine visualizzato dipende dalla vista dell'utente.
+    position: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(16))
+    name: Mapped[str] = mapped_column(String(100))
+    config: Mapped[dict | None] = mapped_column(JSON)
+
+
+class Cell(Base):
+    """Valore presente di una cella: la cella vuota non viene memorizzata."""
+    __tablename__ = "cells"
+    __table_args__ = (CheckConstraint(
+        "(flag IS NOT NULL) + (grade_base IS NOT NULL) + (text_value IS NOT NULL) = 1"
+        " AND (grade_modifier = '' OR grade_base IS NOT NULL)",
+        name="ck_cells_one_value",
+    ),)
+
+    row_id: Mapped[str] = mapped_column(ForeignKey("student_rows.id", ondelete="CASCADE"), primary_key=True)
+    column_id: Mapped[str] = mapped_column(ForeignKey("table_columns.id", ondelete="CASCADE"), primary_key=True, index=True)
+    flag: Mapped[bool | None] = mapped_column(Boolean)
+    grade_base: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    grade_modifier: Mapped[str] = mapped_column(String(8), default="", server_default="")
+    text_value: Mapped[str | None] = mapped_column(String(1000))
+
+
+class TableView(Base):
+    """Vista personale con nome: ordine e visibilità delle colonne, ordinamento delle righe."""
+    __tablename__ = "table_views"
+    __table_args__ = (UniqueConstraint("user_id", "table_id", "name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    table_id: Mapped[str] = mapped_column(ForeignKey("course_tables.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    column_order: Mapped[list] = mapped_column(JSON)
+    hidden_columns: Mapped[list] = mapped_column(JSON)
+    row_sort: Mapped[list] = mapped_column(JSON)
+    # Si riapre la vista usata più di recente.
+    last_used: Mapped[datetime] = mapped_column(DateTime().with_variant(DATETIME(fsp=6), "mysql", "mariadb"))

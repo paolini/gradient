@@ -1,5 +1,6 @@
 import logging
 from datetime import date as Date
+from enum import Enum
 from pathlib import Path
 
 import strawberry
@@ -8,6 +9,7 @@ from graphql import GraphQLError
 from sqlalchemy.exc import SQLAlchemyError
 from strawberry.types import ExecutionContext, Info
 
+from gradient.cells import GradeScale as GradeScaleData, format_decimal, format_flag, format_grade
 from gradient.database import database_error_details
 from gradient.csv_import import FIELDS, Mapping, preview_csv
 from gradient.services import InputError
@@ -51,6 +53,47 @@ class CourseTable:
     location: str | None
 
 
+@strawberry.enum
+class ColumnKind(Enum):
+    MATRICOLA = "matricola"
+    LAST_NAME = "last_name"
+    FIRST_NAME = "first_name"
+    EMAIL = "email"
+    DSA = "dsa"
+    DIS = "dis"
+    FLAG = "flag"
+    GRADE = "grade"
+    TEXT = "text"
+
+
+@strawberry.type
+class GradeScale:
+    maximum: str | None
+    allow_above_maximum: bool
+    allow_negative: bool
+    pass_threshold: str | None
+    modifiers: list[str]
+
+
+@strawberry.type
+class TableColumn:
+    id: strawberry.ID
+    table_id: strawberry.ID
+    kind: ColumnKind
+    name: str
+    grade: GradeScale | None
+
+
+@strawberry.type
+class Cell:
+    column_id: strawberry.ID
+    display: str
+    flag: bool | None
+    grade_base: str | None
+    grade_modifier: str
+    text: str | None
+
+
 @strawberry.type
 class StudentRow:
     id: strawberry.ID
@@ -61,6 +104,23 @@ class StudentRow:
     email: str | None
     dsa: bool
     dis: bool
+    cells: list[Cell]
+
+
+@strawberry.type
+class RowSort:
+    column_id: strawberry.ID
+    descending: bool
+
+
+@strawberry.type
+class TableView:
+    id: strawberry.ID | None = strawberry.field(description="Assente per la vista predefinita non ancora salvata.")
+    name: str
+    active: bool = strawberry.field(description="Vista in uso: l'ultima usata.")
+    column_order: list[strawberry.ID]
+    hidden_columns: list[strawberry.ID]
+    row_sort: list[RowSort]
 
 
 def course_type(row):
@@ -71,8 +131,49 @@ def table_type(row):
     return CourseTable(id=strawberry.ID(row.id), course_id=strawberry.ID(row.course_id), name=row.name, date=row.date, location=row.location)
 
 
-def student_type(row):
-    return StudentRow(id=strawberry.ID(row.id), table_id=strawberry.ID(row.table_id), matricola=row.matricola, first_name=row.first_name, last_name=row.last_name, email=row.email, dsa=row.dsa, dis=row.dis)
+def cell_type(cell):
+    if cell.flag is not None:
+        display = format_flag(cell.flag)
+    elif cell.grade_base is not None:
+        display = format_grade(cell.grade_base, cell.grade_modifier)
+    else:
+        display = cell.text_value or ""
+    return Cell(
+        column_id=strawberry.ID(cell.column_id), display=display, flag=cell.flag,
+        grade_base=None if cell.grade_base is None else format_decimal(cell.grade_base).replace(",", "."),
+        grade_modifier=cell.grade_modifier or "", text=cell.text_value,
+    )
+
+
+def student_type(pair):
+    row, cells = pair
+    return StudentRow(
+        id=strawberry.ID(row.id), table_id=strawberry.ID(row.table_id), matricola=row.matricola,
+        first_name=row.first_name, last_name=row.last_name, email=row.email, dsa=row.dsa, dis=row.dis,
+        cells=[cell_type(cell) for cell in cells],
+    )
+
+
+def column_type(column):
+    grade = None
+    if column.kind == "grade":
+        scale = GradeScaleData.from_json(column.config)
+        grade = GradeScale(
+            maximum=None if scale.maximum is None else format_decimal(scale.maximum),
+            allow_above_maximum=scale.allow_above_maximum, allow_negative=scale.allow_negative,
+            pass_threshold=None if scale.pass_threshold is None else format_decimal(scale.pass_threshold),
+            modifiers=scale.modifiers,
+        )
+    return TableColumn(id=strawberry.ID(column.id), table_id=strawberry.ID(column.table_id), kind=ColumnKind(column.kind), name=column.name, grade=grade)
+
+
+def view_type(view):
+    return TableView(
+        id=strawberry.ID(view.id) if view.id else None, name=view.name, active=view.active,
+        column_order=[strawberry.ID(item) for item in view.column_order],
+        hidden_columns=[strawberry.ID(item) for item in view.hidden_columns],
+        row_sort=[RowSort(column_id=strawberry.ID(item["column"]), descending=item["descending"]) for item in view.row_sort],
+    )
 
 
 @strawberry.type
@@ -98,6 +199,80 @@ class TableResult:
 class StudentResult:
     row: StudentRow | None = None
     errors: list[FieldError] = strawberry.field(default_factory=list)
+
+
+@strawberry.type
+class ColumnResult:
+    column: TableColumn | None = None
+    errors: list[FieldError] = strawberry.field(default_factory=list)
+
+
+@strawberry.type
+class ViewResult:
+    view: TableView | None = None
+    errors: list[FieldError] = strawberry.field(default_factory=list)
+
+
+@strawberry.type
+class ViewsResult:
+    views: list[TableView] | None = None
+    errors: list[FieldError] = strawberry.field(default_factory=list)
+
+
+@strawberry.input
+class GradeScaleInput:
+    maximum: str | None = None
+    allow_above_maximum: bool = False
+    allow_negative: bool = False
+    pass_threshold: str | None = None
+    modifiers: list[str] = strawberry.field(default_factory=list)
+
+
+def scale_data(scale: GradeScaleInput | None) -> dict | None:
+    if scale is None:
+        return None
+    return {
+        "maximum": scale.maximum, "allow_above_maximum": scale.allow_above_maximum,
+        "allow_negative": scale.allow_negative, "pass_threshold": scale.pass_threshold, "modifiers": scale.modifiers,
+    }
+
+
+@strawberry.input
+class AddColumnInput:
+    table_id: strawberry.ID
+    kind: ColumnKind
+    name: str
+    grade: GradeScaleInput | None = None
+
+
+@strawberry.input
+class UpdateColumnInput:
+    column_id: strawberry.ID
+    name: str | None = None
+    grade: GradeScaleInput | None = None
+
+
+@strawberry.input
+class SetCellInput:
+    row_id: strawberry.ID
+    column_id: strawberry.ID
+    value: str
+
+
+@strawberry.input
+class RowSortInput:
+    column_id: strawberry.ID
+    descending: bool = False
+
+
+@strawberry.input
+class SaveViewInput:
+    table_id: strawberry.ID
+    view_id: strawberry.ID | None = strawberry.field(default=None, description="Assente per creare una nuova vista.")
+    name: str
+    column_order: list[strawberry.ID]
+    hidden_columns: list[strawberry.ID]
+    row_sort: list[RowSortInput]
 
 
 @strawberry.input
@@ -248,7 +423,15 @@ class Query:
 
     @strawberry.field
     async def student_rows(self, info: Info, table_id: strawberry.ID) -> list[StudentRow]:
-        return [student_type(row) for row in await execute(info.context["store"].rows(str(table_id)))]
+        return [student_type(pair) for pair in await execute(info.context["store"].rows(str(table_id)))]
+
+    @strawberry.field
+    async def table_columns(self, info: Info, table_id: strawberry.ID) -> list[TableColumn]:
+        return [column_type(column) for column in await execute(info.context["store"].columns(str(table_id)))]
+
+    @strawberry.field(description="Viste personali dell'utente: ordine e visibilità delle colonne, ordinamento delle righe.")
+    async def table_views(self, info: Info, table_id: strawberry.ID) -> list[TableView]:
+        return [view_type(view) for view in await execute(info.context["store"].views(str(table_id)))]
 
 
 @strawberry.type
@@ -289,6 +472,36 @@ class Mutation:
     @strawberry.mutation
     async def add_student(self, info: Info, input: AddStudentInput) -> StudentResult:
         return await mutate(info.context["store"].add_student(str(input.table_id), input.matricola, input.first_name, input.last_name), StudentResult, "row", student_type)
+
+    @strawberry.mutation
+    async def add_column(self, info: Info, input: AddColumnInput) -> ColumnResult:
+        return await mutate(info.context["store"].add_column(str(input.table_id), input.kind.value, input.name, scale_data(input.grade)), ColumnResult, "column", column_type)
+
+    @strawberry.mutation
+    async def update_column(self, info: Info, input: UpdateColumnInput) -> ColumnResult:
+        return await mutate(info.context["store"].update_column(str(input.column_id), input.name, scale_data(input.grade)), ColumnResult, "column", column_type)
+
+    @strawberry.mutation
+    async def delete_column(self, info: Info, column_id: strawberry.ID) -> ColumnResult:
+        return await mutate(info.context["store"].delete_column(str(column_id)), ColumnResult, "column", column_type)
+
+    @strawberry.mutation(description="Imposta una cella a partire dal testo digitato; il testo vuoto svuota la cella.")
+    async def set_cell(self, info: Info, input: SetCellInput) -> StudentResult:
+        return await mutate(info.context["store"].set_cell(str(input.row_id), str(input.column_id), input.value), StudentResult, "row", student_type)
+
+    @strawberry.mutation
+    async def save_table_view(self, info: Info, input: SaveViewInput) -> ViewResult:
+        sort = [{"column": str(item.column_id), "descending": item.descending} for item in input.row_sort]
+        operation = info.context["store"].save_view(str(input.table_id), str(input.view_id) if input.view_id else None, input.name, [str(item) for item in input.column_order], [str(item) for item in input.hidden_columns], sort)
+        return await mutate(operation, ViewResult, "view", view_type)
+
+    @strawberry.mutation(description="Rende la vista quella in uso per la sua tabella.")
+    async def select_table_view(self, info: Info, view_id: strawberry.ID) -> ViewResult:
+        return await mutate(info.context["store"].select_view(str(view_id)), ViewResult, "view", view_type)
+
+    @strawberry.mutation
+    async def delete_table_view(self, info: Info, view_id: strawberry.ID) -> ViewsResult:
+        return await mutate(info.context["store"].delete_view(str(view_id)), ViewsResult, "views", lambda views: [view_type(view) for view in views])
 
 
 schema = GradientSchema(query=Query, mutation=Mutation)

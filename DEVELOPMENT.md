@@ -68,7 +68,9 @@ Tutte le richieste GraphQL richiedono una sessione autenticata. Ogni POST, logou
 
 Il contratto è dichiarato in `gradient/schema.py` ed esportato in [schema.graphql](schema.graphql) con `make schema`. Le operazioni frontend sono in `frontend/src/api.ts`; i test ne verificano la validità rispetto allo schema e controllano che il file esportato sia aggiornato.
 
-Le operazioni disponibili sono `me` (profilo autenticato), `courses`, `courseTables`, `studentRows`, `createCourse`, `createTable`, `addStudent`, `previewCsv` e `importCsvTable`. Le mutazioni restituiscono errori di validazione con campo, codice e messaggio; l'importazione indica anche la riga del CSV. Gli ID inesistenti e le matricole duplicate vengono segnalati senza salvare righe parziali. Gli anni accademici accettano `2026/27` o `2026/2027` e vengono memorizzati nella forma completa. Matricole vuote diventano valori mancanti, mentre gli zeri iniziali vengono conservati.
+Le operazioni disponibili sono `me` (profilo autenticato), `courses`, `courseTables`, `studentRows`, `tableColumns`, `tableViews`, `createCourse`, `createTable`, `addStudent`, `addColumn`, `updateColumn`, `deleteColumn`, `setCell`, `saveTableView`, `selectTableView`, `deleteTableView`, `previewCsv` e `importCsvTable`. Le operazioni frontend possono comporre frammenti condivisi (`ROW`, `COLUMN`, `VIEW` in `api.ts`), espansi dal test del contratto.
+
+`setCell` riceve il testo digitato e lo interpreta sul server secondo il tipo della colonna (`gradient/cells.py`): voti con virgola o punto e modificatori `+`, `-`, `L` o «e lode», flag `sì/no` (anche `s/n`, `x`, `1/0`), testo. Il testo vuoto svuota la cella. Sulle colonne anagrafiche aggiorna i campi della riga; DSA e DIS restano a due stati. La risposta contiene la riga aggiornata con tutte le sue celle. Le mutazioni restituiscono errori di validazione con campo, codice e messaggio; l'importazione indica anche la riga del CSV. Gli ID inesistenti e le matricole duplicate vengono segnalati senza salvare righe parziali. Gli anni accademici accettano `2026/27` o `2026/2027` e vengono memorizzati nella forma completa. Matricole vuote diventano valori mancanti, mentre gli zeri iniziali vengono conservati.
 
 ### Errori del database
 
@@ -81,6 +83,7 @@ Gli errori operativi riconosciuti sono intercettati e producono un solo messaggi
 - `0002`: data e luogo facoltativi delle tabelle, corso di laurea del corso.
 - `0003`: email e flag DSA/DIS delle righe, inizialmente vuoti/off.
 - `0004`: utenti, sessioni e proprietario dei corsi; i corsi precedenti restano senza proprietario.
+- `0005`: definizioni delle colonne (`table_columns`), celle (`cells`) e viste personali (`table_views`). Aggiunge alle tabelle esistenti le sei colonne anagrafiche. Un vincolo CHECK impone che una cella presente abbia esattamente un valore; le celle vuote non sono memorizzate. Celle, colonne e viste sono eliminate in cascata con righe, tabelle e utenti. `last_used` usa i microsecondi per distinguere l'ultima vista usata.
 
 ## Test
 

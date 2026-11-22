@@ -1,6 +1,12 @@
 export type Course = { id: string; name: string; academicYear: string; degreeProgram: string | null };
 export type CourseTable = { id: string; courseId: string; name: string; date: string | null; location: string | null };
-export type StudentRow = { id: string; tableId: string; matricola: string | null; firstName: string; lastName: string; email: string | null; dsa: boolean; dis: boolean };
+export type Cell = { columnId: string; display: string; flag: boolean | null; gradeBase: string | null; gradeModifier: string; text: string | null };
+export type StudentRow = { id: string; tableId: string; matricola: string | null; firstName: string; lastName: string; email: string | null; dsa: boolean; dis: boolean; cells: Cell[] };
+export type ColumnKind = 'MATRICOLA' | 'LAST_NAME' | 'FIRST_NAME' | 'EMAIL' | 'DSA' | 'DIS' | 'FLAG' | 'GRADE' | 'TEXT';
+export type GradeScale = { maximum: string | null; allowAboveMaximum: boolean; allowNegative: boolean; passThreshold: string | null; modifiers: string[] };
+export type TableColumn = { id: string; tableId: string; kind: ColumnKind; name: string; grade: GradeScale | null };
+export type RowSort = { columnId: string; descending: boolean };
+export type TableView = { id: string | null; name: string; active: boolean; columnOrder: string[]; hiddenColumns: string[]; rowSort: RowSort[] };
 export type CsvMapping = { matricola: number | null; lastName: number | null; firstName: number | null; email: number | null; dsa: number | null; dis: number | null };
 export type CsvIssue = { row: number | null; field: string; message: string };
 export type CsvPreview = { headers: string[]; mapping: CsvMapping; totalRows: number; rows: Omit<StudentRow, 'id' | 'tableId'>[]; errors: CsvIssue[]; warnings: CsvIssue[]; delimiter: string; headerRow: number };
@@ -29,13 +35,24 @@ export async function graphql<T>(query: string, variables: Record<string, unknow
   return body.data as T;
 }
 
+const ROW = 'id tableId matricola firstName lastName email dsa dis cells { columnId display flag gradeBase gradeModifier text }';
+const COLUMN = 'id tableId kind name grade { maximum allowAboveMaximum allowNegative passThreshold modifiers }';
+const VIEW = 'id name active columnOrder hiddenColumns rowSort { columnId descending }';
+
 export const operations = {
   courses: 'query Courses { courses { id name academicYear degreeProgram } }',
   tables: 'query Tables($courseId: ID!) { courseTables(courseId: $courseId) { id courseId name date location } }',
-  rows: 'query Rows($tableId: ID!) { studentRows(tableId: $tableId) { id tableId matricola firstName lastName email dsa dis } }',
+  tableData: `query TableData($tableId: ID!) { tableColumns(tableId: $tableId) { ${COLUMN} } studentRows(tableId: $tableId) { ${ROW} } tableViews(tableId: $tableId) { ${VIEW} } }`,
   createCourse: 'mutation CreateCourse($input: CreateCourseInput!) { createCourse(input: $input) { course { id name academicYear degreeProgram } errors { field code message } } }',
   createTable: 'mutation CreateTable($input: CreateTableInput!) { createTable(input: $input) { table { id courseId name date location } errors { field code message } } }',
-  addStudent: 'mutation AddStudent($input: AddStudentInput!) { addStudent(input: $input) { row { id tableId matricola firstName lastName email dsa dis } errors { field code message } } }',
+  addStudent: `mutation AddStudent($input: AddStudentInput!) { addStudent(input: $input) { row { ${ROW} } errors { field code message } } }`,
+  setCell: `mutation SetCell($input: SetCellInput!) { setCell(input: $input) { row { ${ROW} } errors { field code message } } }`,
+  addColumn: `mutation AddColumn($input: AddColumnInput!) { addColumn(input: $input) { column { ${COLUMN} } errors { field code message } } }`,
+  updateColumn: `mutation UpdateColumn($input: UpdateColumnInput!) { updateColumn(input: $input) { column { ${COLUMN} } errors { field code message } } }`,
+  deleteColumn: `mutation DeleteColumn($columnId: ID!) { deleteColumn(columnId: $columnId) { column { id } errors { field code message } } }`,
+  saveTableView: `mutation SaveTableView($input: SaveViewInput!) { saveTableView(input: $input) { view { ${VIEW} } errors { field code message } } }`,
+  selectTableView: `mutation SelectTableView($viewId: ID!) { selectTableView(viewId: $viewId) { view { ${VIEW} } errors { field code message } } }`,
+  deleteTableView: `mutation DeleteTableView($viewId: ID!) { deleteTableView(viewId: $viewId) { views { ${VIEW} } errors { field code message } } }`,
   previewCsv: 'mutation PreviewCsv($input: PreviewCsvInput!) { previewCsv(input: $input) { headers mapping { matricola lastName firstName email dsa dis } totalRows rows { matricola firstName lastName email dsa dis } errors { row field message } warnings { row field message } delimiter headerRow } }',
   importCsv: 'mutation ImportCsv($input: ImportCsvInput!) { importCsvTable(input: $input) { table { id courseId name date location } importedCount errors { row field message } warnings { row field message } } }',
 };

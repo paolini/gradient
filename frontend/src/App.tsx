@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { graphql, operations, requireSuccess } from './api';
-import type { Course, CourseTable, MutationResult, StudentRow } from './api';
+import type { Course, CourseTable, MutationResult } from './api';
 import './style.css';
 import CsvImport from './CsvImport';
 import Dialog from './Dialog';
+import { LoadError, NotFound, courseDetails, courseHref, message, tableDetails, tableHref, useList } from './common';
+import TablePage from './TablePage';
 
 type Route = { page: 'home' } | { page: 'course'; courseId: string } | { page: 'table'; courseId: string; tableId: string };
 
@@ -14,9 +16,6 @@ function parseRoute(hash: string): Route {
   if (parts[0] === 'corsi' && parts[1]) return { page: 'course', courseId: parts[1] };
   return { page: 'home' };
 }
-
-const courseHref = (courseId: string) => `#/corsi/${encodeURIComponent(courseId)}`;
-const tableHref = (courseId: string, tableId: string) => `${courseHref(courseId)}/tabelle/${encodeURIComponent(tableId)}`;
 
 function useRoute() {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash));
@@ -28,43 +27,10 @@ function useRoute() {
   return route;
 }
 
-function useList<T>(query: string, field: string, parent: string | null, revision: number) {
-  const key = JSON.stringify([query, parent, revision]);
-  const [state, setState] = useState<{ key: string; items: T[]; loading: boolean; error: string }>({ key, items: [], loading: true, error: '' });
-  useEffect(() => {
-    let active = true;
-    setState({ key, items: [], loading: true, error: '' });
-    const variables = field === 'courseTables' ? { courseId: parent } : field === 'studentRows' ? { tableId: parent } : {};
-    graphql<Record<string, T[]>>(query, variables).then(
-      data => { if (active) setState({ key, items: data[field], loading: false, error: '' }); },
-      error => { if (active) setState({ key, items: [], loading: false, error: String(error.message) }); },
-    );
-    return () => { active = false; };
-  }, [query, field, parent, key]);
-  return state.key === key ? state : { items: [], loading: true, error: '' };
-}
-
 function defaultYear() {
   const now = new Date();
   const year = now.getFullYear() - (now.getMonth() < 8 ? 1 : 0);
   return `${year}/${year + 1}`;
-}
-
-function formatDate(value: string) {
-  const [year, month, day] = value.split('-');
-  return `${day}/${month}/${year}`;
-}
-
-const courseDetails = (course: Course) => [course.degreeProgram, course.academicYear].filter(Boolean).join(' · ');
-const tableDetails = (table: CourseTable) => [table.date && formatDate(table.date), table.location].filter(Boolean).join(' · ');
-const message = (failure: unknown, fallback: string) => failure instanceof Error ? failure.message : fallback;
-
-function LoadError({ text, onRetry }: { text: string; onRetry: () => void }) {
-  return <div role="alert" className="error">{text} <button type="button" onClick={onRetry}>Riprova</button></div>;
-}
-
-function NotFound({ text }: { text: string }) {
-  return <div className="empty-state"><p>{text}</p><a href="#/">Torna ai corsi</a></div>;
 }
 
 function CourseForm({ onCreated }: { onCreated: (course: Course) => void }) {
@@ -168,63 +134,6 @@ function CoursePage({ courseId }: { courseId: string }) {
     {dialog === 'csv' && <Dialog title="Nuova tabella da CSV" wide onClose={() => { if (!busy) setDialog(''); }}>
       <CsvImport courseId={courseId} disabled={false} onBusy={setBusy} onCreated={table => { window.location.hash = tableHref(courseId, table.id); }} />
     </Dialog>}
-  </>;
-}
-
-function TablePage({ courseId, tableId }: { courseId: string; tableId: string }) {
-  const [revision, setRevision] = useState(0);
-  const courses = useList<Course>(operations.courses, 'courses', null, revision);
-  const tables = useList<CourseTable>(operations.tables, 'courseTables', courseId, revision);
-  const rows = useList<StudentRow>(operations.rows, 'studentRows', tableId, revision);
-  const [added, setAdded] = useState<StudentRow[]>([]);
-  const [matricola, setMatricola] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState('');
-  const firstInput = useRef<HTMLInputElement>(null);
-  const course = courses.items.find(item => item.id === courseId);
-  const table = tables.items.find(item => item.id === tableId);
-
-  async function addStudent(event: FormEvent) {
-    event.preventDefault();
-    if (!matricola.trim() && !lastName.trim() && !firstName.trim()) return;
-    setPending(true); setError('');
-    try {
-      const data = await graphql<{ addStudent: MutationResult<{ row: StudentRow | null }> }>(operations.addStudent, { input: { tableId, matricola: matricola || null, firstName, lastName } });
-      const result = requireSuccess(data.addStudent);
-      const row = result.row;
-      if (row) setAdded(current => [...current, row]);
-      setMatricola(''); setLastName(''); setFirstName('');
-    } catch (failure) { setError(message(failure, 'Salvataggio non riuscito.')); }
-    finally { setPending(false); setTimeout(() => firstInput.current?.focus()); }
-  }
-
-  const loadError = courses.error || tables.error || rows.error;
-  if (loadError && !rows.items.length) return <><a className="back" href={courseHref(courseId)}>‹ Corso</a><LoadError text={loadError} onRetry={() => { setAdded([]); setRevision(value => value + 1); }} /></>;
-  if (courses.loading || tables.loading) return <p role="status">Caricamento…</p>;
-  if (!course) return <NotFound text="Corso non trovato." />;
-  if (!table) return <NotFound text="Tabella non trovata." />;
-  const details = tableDetails(table);
-  const allRows = rows.loading ? [] : [...rows.items, ...added];
-  return <>
-    <a className="back" href={courseHref(courseId)}>‹ {course.name} · {course.academicYear}</a>
-    <div className="page-heading"><div><h1>{table.name}</h1>{details && <p>{details}</p>}</div>
-      <span className="count">{rows.loading ? '' : `${allRows.length} studenti`}</span></div>
-    {error && <p role="alert" className="error">{error}</p>}
-    <form id="new-student" onSubmit={addStudent} />
-    <div className="table-scroll sheet"><table><thead><tr><th>Matricola</th><th>Cognome</th><th>Nome</th><th>Email</th><th>DSA</th><th>DIS</th></tr></thead>
-      <tbody>
-        {allRows.map(row => <tr key={row.id}><td>{row.matricola ?? <span className="muted">Da inserire</span>}</td><td>{row.lastName}</td><td>{row.firstName}</td><td>{row.email}</td><td>{row.dsa ? 'Sì' : ''}</td><td>{row.dis ? 'Sì' : ''}</td></tr>)}
-        {rows.loading && <tr><td colSpan={6} className="empty">Caricamento…</td></tr>}
-      </tbody>
-      <tfoot><tr className="new-row">
-        <td><input ref={firstInput} form="new-student" aria-label="Matricola del nuovo studente" placeholder="+ Matricola" value={matricola} onChange={event => setMatricola(event.target.value)} maxLength={64} autoComplete="off" disabled={pending} /></td>
-        <td><input form="new-student" aria-label="Cognome del nuovo studente" placeholder="Cognome" value={lastName} onChange={event => setLastName(event.target.value)} maxLength={200} autoComplete="off" disabled={pending} /></td>
-        <td><input form="new-student" aria-label="Nome del nuovo studente" placeholder="Nome" value={firstName} onChange={event => setFirstName(event.target.value)} maxLength={200} autoComplete="off" disabled={pending} /></td>
-        <td colSpan={3} className="new-row-hint"><button form="new-student" className="secondary small" disabled={pending}>Aggiungi</button> <span>oppure Invio</span></td>
-      </tr></tfoot>
-    </table></div>
   </>;
 }
 

@@ -14,9 +14,11 @@ Sono implementati:
 
 - login Google e UniPi, sessioni revocabili e isolamento dei corsi per proprietario;
 - creazione e lettura di corsi, tabelle e righe studente tramite GraphQL e interfaccia React;
-- importazione iniziale CSV con anteprima, associazione delle colonne e salvataggio atomico, con email e flag DSA/DIS.
+- importazione iniziale CSV con anteprima, associazione delle colonne e salvataggio atomico, con email e flag DSA/DIS;
+- colonne personalizzate di tipo flag, voto e testo, con modifica delle celle nella griglia da tastiera, comprese le colonne anagrafiche;
+- viste personali con nome: ordine e visibilità delle colonne, ordinamento delle righe.
 
-Non sono ancora implementati condivisione dei corsi, collegamento account, pannello amministrativo, reimportazioni, colonne personalizzabili, voti, formule e collegamenti tra tabelle.
+Non sono ancora implementati condivisione dei corsi, collegamento account, pannello amministrativo, reimportazioni, codice compito, risposta multipla, formule, riepilogo del corso e collegamenti tra tabelle.
 
 ## Accesso
 
@@ -87,24 +89,33 @@ Decisioni concordate:
 - le colonne flag, come presente o consegna, hanno tre stati: sì, no e vuoto. Il vuoto rappresenta un dato non inserito e non equivale a «no». Questa regola non si applica a DSA e DIS, dove la cella vuota rappresenta off;
 - ogni cella può essere vuota. Il vuoto è il valore mancante, unico per tutti i tipi di colonna: una cella vuota non esiste, mentre una cella presente ha sempre un valore (un flag sì o no, un voto con valore base, un testo non vuoto). Un testo vuoto o composto da soli spazi equivale a una cella vuota. Svuotare una cella significa eliminarla;
 - matricola, cognome, nome ed email restano colonne distinte, senza una colonna «studente» unica;
-- ogni colonna, comprese quelle anagrafiche e DSA/DIS, può essere nascosta e riordinata.
+- ogni colonna, comprese quelle anagrafiche e DSA/DIS, può essere nascosta e riordinata. Ordine e visibilità delle colonne e ordinamento delle righe sono una vista personale: dipendono dall'utente e non modificano la tabella, quindi utenti diversi possono vedere la stessa tabella in modo diverso. Senza una vista personale si usano l'ordine di creazione delle colonne, tutte visibili, e le righe ordinate per cognome e nome. L'ordinamento delle righe è un criterio (per esempio per una colonna, crescente o decrescente), non un ordine manuale. I valori mancanti restano in fondo in entrambi i versi;
+- un utente può avere più viste con nome della stessa tabella. Si riapre l'ultima vista usata e ogni modifica alla vista si salva automaticamente; per una variante si crea una nuova vista copiando quella attuale.
+
+Sono implementati i tipi **flag**, **voto** e **testo**:
+
+- la colonna voto configura un massimo facoltativo, se ammettere valori sopra il massimo o negativi, una sufficienza facoltativa (i valori inferiori sono evidenziati) e i modificatori ammessi tra `+`, `-` e `L`, inizialmente nessuno. I voti ammettono fino a quattro cifre decimali;
+- modificare la scala di una colonna è rifiutato se qualche voto già inserito non la rispetterebbe;
+- i nomi delle colonne sono unici nella tabella, senza distinzione tra maiuscole e minuscole, in vista delle formule che vi faranno riferimento;
+- le colonne anagrafiche e DSA/DIS non si possono eliminare, ma si possono nascondere e rinominare.
+
+Il valore numerico dei modificatori nei calcoli (incremento di `+` e `-`, bonus della lode) sarà configurato con le formule.
 
 Proposta in discussione, non ancora approvata né implementata:
 
-- **flag**, per esempio presente o consegna;
-- **voto**, per voti e punteggi degli esercizi;
-- **testo**, per note libere;
 - **codice compito**, che identifica la variante;
 - **blocco a risposta multipla**: una cella per studente con la stringa delle risposte (per esempio `ABDC-E`, con `-` per la risposta vuota), visualizzabile per domanda, e una chiave delle risposte corrette per ciascun codice compito;
 - **calcolata**, con una formula che fa riferimento alle colonne per nome e viene valutata dal server.
 
-La proposta prevede definizioni delle colonne per tabella, con posizione, nome, tipo e configurazione, e celle memorizzate separatamente per coppia riga/colonna. Prevede inoltre l'aggiunta di più colonne di esercizi in un'unica operazione e la copia della struttura delle colonne da un'altra tabella.
+La proposta prevede inoltre l'aggiunta di più colonne di esercizi in un'unica operazione e la copia della struttura delle colonne da un'altra tabella.
 
 Questioni aperte:
 
 - se le varianti a risposta multipla hanno chiavi indipendenti o sono permutazioni di un compito base;
 - se i punteggi della risposta multipla (giusta, sbagliata, vuota) sono uniformi o pesati per domanda;
-- sintassi delle formule e valutazione esclusivamente lato server.
+- sintassi delle formule e valutazione esclusivamente lato server;
+- se le viste potranno essere condivise tra utenti, quando sarà introdotta la condivisione dei corsi, e se dovranno anche filtrare le righe;
+- se la lode debba essere ammessa soltanto sul massimo della scala.
 
 ## Riepilogo del corso
 
