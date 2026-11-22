@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import App from './App';
+import TopBar from './TopBar';
+import './style.css';
 
 type Session = { user: { id: string; name: string; email: string; provider: string } | null; providers: string[] };
 
@@ -37,6 +39,6 @@ export default function Auth() {
     {session.providers.map(provider => <p key={provider}><a href={`/auth/login/${provider}`}>Accedi con {provider === 'google' ? 'Google' : 'UniPi'}</a></p>)}
     {!session.providers.length && <p>Nessun metodo di accesso configurato. Contatta chi gestisce il servizio.</p>}
   </main>;
-  return <><header className="account"><span>{session.user.name} · {session.user.email} ({session.user.provider === 'google' ? 'Google' : 'UniPi'})</span><button disabled={pending} onClick={logout}>Esci</button></header>
-    {error && <p role="alert">{error}</p>}<App key={session.user.id} /></>;
+  return <><TopBar user={session.user} pending={pending} onLogout={logout} />
+    {error && <p role="alert" className="error topbar-error">{error}</p>}<App key={session.user.id} /></>;
 }

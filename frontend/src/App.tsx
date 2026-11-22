@@ -84,7 +84,6 @@ export default function App() {
   const loadError = courses.error || tables.error || rows.error;
 
   return <div className="app">
-    <header><div><p className="eyebrow">VALUTAZIONI UNIVERSITARIE</p><h1>Gradient</h1></div><span className="badge">Sviluppo locale</span></header>
     <main>
       {(error || loadError) && <div role="alert" className="error">{error || loadError} <button type="button" onClick={() => setRevision(value => value + 1)}>Riprova</button></div>}
       <p role="status" className="notice">{pending ? 'Salvataggio…' : notice}</p>
