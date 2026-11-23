@@ -20,6 +20,16 @@ from gradient.services import Store
 from gradient.typst_render import worker as typst_worker
 
 
+class GradientGraphQLRouter(GraphQLRouter):
+    """GraphiQL invia l'intestazione richiesta da check_origin, introspezione compresa."""
+
+    @property
+    def graphql_ide_html(self) -> str:
+        return super().graphql_ide_html.replace(
+            "const defaultHeaders = {};",
+            'const defaultHeaders = {"X-Gradient-Request": "1"};', 1)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
 
@@ -53,7 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Liveness del processo: non apre connessioni e non esegue migrazioni.
         return {"status": "ok"}
 
-    application.include_router(GraphQLRouter(schema, context_getter=context, allow_queries_via_get=False), prefix="/graphql")
+    application.include_router(GradientGraphQLRouter(schema, context_getter=context, allow_queries_via_get=False), prefix="/graphql")
     frontend = Path(__file__).resolve().parents[1] / "frontend" / "dist"
     if frontend.is_dir():
         application.mount("/", StaticFiles(directory=frontend, html=True), name="frontend")

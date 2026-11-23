@@ -62,7 +62,7 @@ Il cookie applicativo è HttpOnly e SameSite=Lax, Secure su HTTPS; nel database 
 
 Solo i provider completamente configurati vengono mostrati nella pagina di accesso. Non è previsto un accesso anonimo di sviluppo. I test con provider simulati non sostituiscono la verifica reale, in particolare per le impostazioni del client UniPi.
 
-Tutte le richieste GraphQL richiedono una sessione autenticata. Ogni POST, logout compreso, richiede l'intestazione `X-Gradient-Request: 1` e, se presente, un'`Origin` corrispondente ad `AUTH_BASE_URL`. L'editor GraphQL può essere aperto tramite l'origine frontend dopo il login, configurando questa intestazione. In sviluppo Vite inoltra `/graphql` e `/auth` al backend locale, senza configurazioni CORS.
+Tutte le richieste GraphQL richiedono una sessione autenticata. Ogni POST, logout compreso, richiede l'intestazione `X-Gradient-Request: 1` e, se presente, un'`Origin` corrispondente ad `AUTH_BASE_URL`. L'editor GraphiQL su `/graphql` invia automaticamente questa intestazione e va aperto tramite l'origine frontend dopo il login. In sviluppo Vite inoltra `/graphql` e `/auth` al backend locale, senza configurazioni CORS.
 
 ## Contratto GraphQL
 

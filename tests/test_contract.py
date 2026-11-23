@@ -62,3 +62,8 @@ def test_http_validation_without_database():
             "query": 'mutation { createCourse(input: {name: "Analisi", academicYear: "2026/2029"}) { errors { field code } } }',
         })
         assert result.json()["data"]["createCourse"]["errors"][0]["field"] == "academicYear"
+
+
+def test_graphiql_sends_required_header():
+    from gradient.app import GradientGraphQLRouter
+    assert 'const defaultHeaders = {"X-Gradient-Request": "1"};' in GradientGraphQLRouter(schema).graphql_ide_html
