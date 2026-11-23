@@ -21,21 +21,32 @@ src/gradient/
   config.clj      variabili d'ambiente e .env, validazione
   db.clj          schema Datomic, connessione, classificazione errori
   store.clj       corsi, tabelle, righe, importazione; controlli di proprietà
+  cells.clj       interpretazione e formattazione dei valori (voti, flag, testo), senza database
+  columns.clj     colonne e celle
+  views.clj       viste personali
   csv_import.clj  parser CSV strict e validazione dell'importazione
   graphql.clj     resolver Lacinia collegati a resources/schema.graphql
   auth.clj        OAuth, cookie di stato firmato, sessioni
   main.clj        route, middleware, avvio
 resources/schema.graphql   contratto GraphQL (fonte, non generato)
-frontend/src/gradient/ui/  main, app (pagine e routing), csv_import, components, api
+frontend/src/gradient/ui/  main, app (pagine e routing), table (pagina della tabella), grid,
+                           column_dialog, columns, csv_import, components, common, api,
+                           operations.cljc (operazioni GraphQL, condivise con i test)
 test/gradient/             test (Datomic in memoria)
 dev/user.clj               start/stop dalla REPL
 ```
 
 ## Contratto GraphQL
 
-In `main` il contratto è esportato dal codice Python (`make schema`). Qui il rapporto è invertito: `resources/schema.graphql` è la fonte e Lacinia lo carica all'avvio. Una mutation o un tipo si aggiungono prima nello schema, poi si collega il resolver in `gradient.graphql/resolvers`. `contract_test.clj` verifica che le operazioni del frontend (`frontend/src/gradient/ui/api.cljs`) siano valide rispetto allo schema.
+In `main` il contratto è esportato dal codice Python (`make schema`). Qui il rapporto è invertito: `resources/schema.graphql` è la fonte e Lacinia lo carica all'avvio. Una mutation o un tipo si aggiungono prima nello schema, poi si collega il resolver in `gradient.graphql/resolvers`. Le operazioni del frontend sono in `frontend/src/gradient/ui/operations.cljc`, composte con frammenti condivisi (`row-fields`, `column-fields`, `view-fields`). Essendo un file `.cljc`, lo compila shadow-cljs e lo caricano anche i test sulla JVM (`frontend/src` è nel classpath degli alias `:test` e `:dev`): `contract_test.clj` verifica ogni operazione rispetto allo schema.
 
-Unica differenza dal contratto di `main`: in `AddStudentInput`, `firstName` e `lastName` sono `String = ""` invece di `String! = ""`, perché Lacinia rifiuta campi non annullabili con valore predefinito. Il backend tratta null come stringa vuota.
+Differenze dal contratto di `main`, tutte dovute al rifiuto di Lacinia per i campi non annullabili con valore predefinito:
+
+- in `AddStudentInput`, `firstName` e `lastName` sono `String = ""` invece di `String! = ""`;
+- in `GradeScaleInput`, `allowAboveMaximum` e `allowNegative` sono `Boolean = false`, e `modifiers` è `[String!]` senza valore predefinito invece di `[String!]! = []`;
+- in `RowSortInput`, `descending` è `Boolean = false`.
+
+Il backend tratta null come il valore predefinito (stringa vuota, false, elenco vuoto).
 
 Il codice Clojure usa chiavi kebab-case; la conversione da e verso il camelCase del client avviene al confine, in `gradient.graphql`.
 
@@ -51,7 +62,13 @@ Corrispondenza con le tabelle di `main`:
 - La data della tabella è una stringa ISO `AAAA-MM-GG`: Datomic non ha un tipo data senza orario.
 - Lo schema è additivo e idempotente: viene installato a ogni avvio (`gradient.db/connect`) e non servono migrazioni versionate. `make migrate` lo installa senza avviare il server. Rinominare o cambiare tipo a un attributo richiede invece una procedura esplicita (nuovo attributo e copia dei dati).
 - Datomic conserva la storia di ogni modifica: i valori precedenti restano interrogabili con `d/as-of` e `d/history`, e la data di creazione di una tabella si ricava dall'istante della transazione. Questo non è ancora usato dall'interfaccia, ma è rilevante per il riepilogo (prova più recente) e per un eventuale registro delle modifiche dei voti. Di conseguenza anche i dati cancellati restano nella storia, compresi gli hash delle sessioni revocate; un'eventuale cancellazione definitiva richiede l'*excision*, non disponibile in Datomic Local.
-- L'importazione CSV crea la tabella e tutte le righe in un'unica transazione: o tutto o niente.
+- L'importazione CSV crea la tabella, le colonne anagrafiche e tutte le righe in un'unica transazione: o tutto o niente.
+- `table_columns`, `cells` e `table_views` diventano entità `:column/*`, `:cell/*` e `:view/*`. Il tipo di colonna è una keyword (`:last-name`, `:grade`, ...); il contratto usa l'enum `LAST_NAME`, `GRADE`, ... e la conversione avviene in `gradient.columns`. La scala dei voti è in attributi distinti (`:column/grade-maximum` e `:column/grade-pass-threshold` di tipo `bigdec`, modificatori come attributo multiplo), non in un campo JSON.
+- I nomi delle colonne sono unici nella tabella senza distinguere maiuscole e minuscole tramite `:column/name-key` (nome in minuscolo) e la tupla composita `:column/table+name-key`. Lo stesso vale per i nomi delle viste di un utente (`:view/user+table+name-key`). In MariaDB lo garantisce la collation.
+- Una cella è identificata dalla tupla composita `:cell/row+column`. Il vincolo CHECK di `main` («esattamente un valore; il modificatore solo con un voto») è il predicato di entità `gradient.db/one-cell-value?`, dichiarato nella specifica `:cell/valid`. Datomic lo verifica soltanto nelle transazioni che asseriscono `:db/ensure :cell/valid`, come fanno tutte quelle di `gradient.columns`: a differenza del CHECK non protegge da transazioni scritte a mano senza `:db/ensure`. Svuotare una cella la elimina con `:db/retractEntity`.
+- Datomic non ha liste ordinate: ordine delle colonne, colonne nascoste e ordinamento delle righe di una vista sono vettori EDN in attributi stringa.
+- `:view/last-used` ha la precisione del millisecondo (in `main` microsecondi). Per riconoscere sempre l'ultima vista usata, ogni utilizzo riceve un istante successivo a quello di tutte le altre viste della tabella.
+- Le tabelle create prima delle colonne configurabili ricevono le sei colonne anagrafiche all'avvio (`gradient.db/connect`), come nella migrazione `0005` di `main`. L'operazione è idempotente.
 
 Gli errori del database (anomalie Cognitect) restano generici per il client e sono classificati nei log (`gradient.db/error-details`). Gli errori imprevisti dei resolver vengono registrati con lo stack trace completo.
 
@@ -65,7 +82,11 @@ Le regole sono quelle di `main`. Login con state e PKCE S256, scambio del codice
 
 ## Frontend
 
-Le pagine replicano quelle di `main`: elenco dei corsi, corso, tabella con inserimento rapido e importazione CSV. Lo stato è in ratom Reagent; non si usa re-frame. `make dev` avvia shadow-cljs con ricarica a caldo su 5173 e inoltra al backend su 8000 le richieste che non corrispondono a file. `make build` produce `frontend/public/js/main.js`, servito dal backend se `GRADIENT_STATIC_DIR` esiste.
+Le pagine replicano quelle di `main`: elenco dei corsi, corso, tabella con inserimento rapido e importazione CSV. Lo stato è in ratom Reagent; non si usa re-frame.
+
+La griglia (`grid.cljs`) riproduce `Grid.tsx`, con una differenza dovuta a Reagent: il rendering avviene al fotogramma successivo, non subito dopo l'evento. I tasti digitati tra l'apertura dell'editor e la sua comparsa nel DOM vengono quindi aggiunti alla bozza dal gestore della griglia invece di andare persi. Il focus sulla cella attiva si sposta in `component-did-update`.
+
+La finestra di dialogo sposta il focus sul primo campo dopo `showModal`, che altrimenti lo metterebbe sul pulsante di chiusura: `:auto-focus` di React non basta dentro un `<dialog>` modale. `make dev` avvia shadow-cljs con ricarica a caldo su 5173 e inoltra al backend su 8000 le richieste che non corrispondono a file. `make build` produce `frontend/public/js/main.js`, servito dal backend se `GRADIENT_STATIC_DIR` esiste.
 
 ## Memoria
 

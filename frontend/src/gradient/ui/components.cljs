@@ -6,11 +6,19 @@
 (defn dialog
   "Finestra modale nativa: Esc e il pulsante di chiusura chiamano `on-close`."
   [{:keys [title wide on-close]} & children]
-  (r/with-let [node (atom nil)]
-    (into [:dialog {:ref (fn [el]
-                           (when (and el (not (.-open el))) (.showModal el))
-                           (when (and (nil? el) @node) (.close @node))
-                           (reset! node el))
+  ;; Funzione `ref` stabile: React la chiama soltanto all'apertura e alla chiusura. Una funzione
+  ;; nuova a ogni rendering verrebbe chiamata con nil e poi con l'elemento, chiudendo e
+  ;; riaprendo la finestra a ogni tasto quando il contenuto dipende da uno stato.
+  (r/with-let [node (atom nil)
+               ref (fn [el]
+                     (when (and el (not (.-open el)))
+                       (.showModal el)
+                       ;; showModal mette il focus sul primo elemento (il pulsante di chiusura):
+                       ;; `:auto-focus` di React non basta, si sposta sul primo campo.
+                       (some-> (.querySelector el "input:not([type=hidden]), select, textarea") .focus))
+                     (when (and (nil? el) @node) (.close @node))
+                     (reset! node el))]
+    (into [:dialog {:ref ref
                     :class (if wide "dialog wide" "dialog")
                     :aria-label title
                     :on-cancel (fn [e] (.preventDefault e) (on-close))}
@@ -65,3 +73,35 @@
               [:button {:ref #(some-> % .focus) :type "button" :role "menuitem" :disabled pending
                         :on-click (fn [] (reset! open false) (on-logout))}
                "Esci"]])]]])})))
+
+(defn menu
+  "Menu a comparsa: `render` riceve la funzione che lo chiude e restituisce le voci.
+  Si chiude anche con Esc o con un clic esterno."
+  [_ _]
+  (let [open (r/atom false)
+        container (atom nil)
+        listeners (atom nil)
+        close! (fn []
+                 (when-let [[on-pointer on-key] @listeners]
+                   (js/document.removeEventListener "pointerdown" on-pointer)
+                   (js/document.removeEventListener "keydown" on-key)
+                   (reset! listeners nil))
+                 (reset! open false))
+        open! (fn []
+                (let [on-pointer (fn [e] (when-not (some-> @container (.contains (.-target e))) (close!)))
+                      on-key (fn [e] (when (= "Escape" (.-key e)) (close!)))]
+                  (js/document.addEventListener "pointerdown" on-pointer)
+                  (js/document.addEventListener "keydown" on-key)
+                  (reset! listeners [on-pointer on-key])
+                  (reset! open true)))]
+    (r/create-class
+     {:component-will-unmount (fn [_] (close!))
+      :reagent-render
+      (fn [{:keys [label title]} render]
+        [:div.menu {:ref #(reset! container %)}
+         [:button.menu-button {:type "button" :aria-haspopup "menu" :aria-expanded @open
+                               :aria-label title :title title
+                               :on-click #(if @open (close!) (open!))}
+          label]
+         (when @open
+           [:div.menu-list {:role "menu"} (render close!)])])})))

@@ -2,7 +2,7 @@
 
 Registro web delle valutazioni universitarie: compitini, scritti e orali in tabelle simili a un foglio di calcolo, con login Google o UniPi. Backend Clojure con GraphQL (Lacinia) su Datomic Local, frontend ClojureScript con Reagent.
 
-Questo branch (`clojure`) è un esperimento: riscrive da zero in Clojure le funzionalità di `main` al commit `d6d9b19`, per confrontare il risultato. Non ha storia in comune con `main`.
+Questo branch (`clojure`) è un esperimento: riscrive da zero in Clojure le funzionalità di `main` al commit `64df627`, per confrontare il risultato. Non ha storia in comune con `main`.
 
 Approfondimenti: [DOCUMENTATION.md](DOCUMENTATION.md) (requisiti e decisioni funzionali), [DEVELOPMENT.md](DEVELOPMENT.md) (dettagli tecnici e differenze rispetto a `main`).
 

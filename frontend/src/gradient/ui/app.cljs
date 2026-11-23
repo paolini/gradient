@@ -2,8 +2,10 @@
   "Pagine dei corsi, del corso e della tabella, con routing sull'hash dell'URL."
   (:require [clojure.string :as str]
             [gradient.ui.api :as api]
+            [gradient.ui.common :refer [course-details course-href go! load-list table-details table-href]]
             [gradient.ui.components :refer [dialog load-error not-found]]
             [gradient.ui.csv-import :refer [csv-import]]
+            [gradient.ui.table :refer [table-page]]
             [reagent.core :as r]))
 
 ;; ---------------------------------------------------------------------------
@@ -17,41 +19,17 @@
       (and (= "corsi" (get parts 0)) (get parts 1)) {:page :course :course-id (parts 1)}
       :else {:page :home})))
 
-(defn course-href [course-id] (str "#/corsi/" (js/encodeURIComponent course-id)))
-(defn table-href [course-id table-id] (str (course-href course-id) "/tabelle/" (js/encodeURIComponent table-id)))
-(defn go! [href] (set! (.-hash js/location) href))
-
 (defonce route (r/atom (parse-route (.-hash js/location))))
 (defonce _listener
   (js/window.addEventListener "hashchange" (fn [] (reset! route (parse-route (.-hash js/location))) (js/window.scrollTo 0 0))))
 
 ;; ---------------------------------------------------------------------------
-;; Dati
-
-(defn load-list
-  "Carica un elenco nella ratom `state`; le risposte superate da un nuovo caricamento vengono ignorate."
-  [state operation field variables]
-  (let [token (js/Symbol)]
-    (reset! state {:items [] :loading true :error "" :token token})
-    (-> (api/graphql operation variables)
-        (.then #(when (= token (:token @state)) (swap! state assoc :items (get % field) :loading false)))
-        (.catch #(when (= token (:token @state)) (swap! state assoc :loading false :error (api/message % "Caricamento non riuscito.")))))
-    state))
+;; Moduli
 
 (defn- default-year []
   (let [now (js/Date.)
         year (- (.getFullYear now) (if (< (.getMonth now) 8) 1 0))]
     (str year "/" (inc year))))
-
-(defn- format-date [value]
-  (let [[year month day] (str/split value #"-")] (str day "/" month "/" year)))
-
-(defn- details [& parts] (str/join " · " (remove str/blank? parts)))
-(defn course-details [{:keys [degreeProgram academicYear]}] (details degreeProgram academicYear))
-(defn table-details [{:keys [date location]}] (details (some-> date format-date) location))
-
-;; ---------------------------------------------------------------------------
-;; Moduli
 
 (defn- form
   "Modulo di creazione: invia `submit` con i valori correnti e gestisce attesa ed errori."
@@ -166,77 +144,6 @@
                                 :on-busy #(reset! busy %)
                                 :on-created (fn [table _] (go! (table-href course-id (:id table))))}]]
              nil)])))))
-
-(defn- new-student-row [table-id on-added]
-  (let [values (r/atom {:matricola "" :lastName "" :firstName ""})
-        status (r/atom {:pending false :error ""})
-        first-input (atom nil)
-        submit (fn [e]
-                 (.preventDefault e)
-                 (let [{:keys [matricola lastName firstName]} @values]
-                   (when-not (every? str/blank? [matricola lastName firstName])
-                     (reset! status {:pending true :error ""})
-                     (-> (api/graphql :add-student {:input {:tableId table-id :matricola (not-empty matricola)
-                                                            :firstName firstName :lastName lastName}})
-                         (.then #(do (on-added (:row (api/require-success (:addStudent %))))
-                                     (reset! values {:matricola "" :lastName "" :firstName ""})))
-                         (.catch #(swap! status assoc :error (api/message % "Salvataggio non riuscito.")))
-                         (.finally #(do (swap! status assoc :pending false)
-                                        (js/setTimeout (fn [] (some-> @first-input .focus)))))))))]
-    (fn [_ _]
-      (let [{:keys [pending error]} @status
-            cell (fn [k label placeholder max-length & [ref]]
-                   [:td [:input {:ref ref :form "new-student" :aria-label (str label " del nuovo studente")
-                                 :placeholder placeholder :value (k @values) :max-length max-length
-                                 :auto-complete "off" :disabled pending
-                                 :on-change #(swap! values assoc k (.. % -target -value))}]])]
-        [:tfoot
-         [:tr.new-row
-          (cell :matricola "Matricola" "+ Matricola" 64 #(reset! first-input %))
-          (cell :lastName "Cognome" "Cognome" 200)
-          (cell :firstName "Nome" "Nome" 200)
-          [:td.new-row-hint {:col-span 3}
-           [:form#new-student {:on-submit submit}]
-           [:button.secondary.small {:form "new-student" :disabled pending} "Aggiungi"] " " [:span "oppure Invio"]
-           (when (seq error) [:span.error {:role "alert"} " " error])]]]))))
-
-(defn table-page [course-id table-id]
-  (let [courses (r/atom nil)
-        tables (r/atom nil)
-        rows (r/atom nil)
-        added (r/atom [])
-        reload! #(do (reset! added [])
-                     (load-list courses :courses :courses {})
-                     (load-list tables :tables :courseTables {:courseId course-id})
-                     (load-list rows :rows :studentRows {:tableId table-id}))]
-    (reload!)
-    (fn [course-id table-id]
-      (let [course (first (filter #(= course-id (:id %)) (:items @courses)))
-            table (first (filter #(= table-id (:id %)) (:items @tables)))
-            error (some not-empty (map :error [@courses @tables @rows]))
-            all-rows (if (:loading @rows) [] (concat (:items @rows) @added))]
-        (cond
-          (and error (empty? (:items @rows)))
-          [:<> [:a.back {:href (course-href course-id)} "‹ Corso"] [load-error error reload!]]
-          (or (:loading @courses) (:loading @tables)) [:p {:role "status"} "Caricamento…"]
-          (nil? course) [not-found "Corso non trovato."]
-          (nil? table) [not-found "Tabella non trovata."]
-          :else
-          [:<>
-           [:a.back {:href (course-href course-id)} "‹ " (:name course) " · " (:academicYear course)]
-           [:div.page-heading
-            [:div [:h1 (:name table)] (when-let [d (not-empty (table-details table))] [:p d])]
-            [:span.count (when-not (:loading @rows) (str (count all-rows) " studenti"))]]
-           [:div.table-scroll.sheet
-            [:table
-             [:thead [:tr (for [h ["Matricola" "Cognome" "Nome" "Email" "DSA" "DIS"]] ^{:key h} [:th h])]]
-             [:tbody
-              (for [row all-rows]
-                ^{:key (:id row)}
-                [:tr [:td (or (:matricola row) [:span.muted "Da inserire"])] [:td (:lastName row)] [:td (:firstName row)]
-                 [:td (:email row)] [:td (when (:dsa row) "Sì")] [:td (when (:dis row) "Sì")]])
-              (when (:loading @rows) [:tr [:td.empty {:col-span 6} "Caricamento…"]])]
-             [new-student-row table-id #(swap! added conj %)]]]])))))
 
 (defn app []
   (let [{:keys [page course-id table-id]} @route]

@@ -2,6 +2,7 @@
   "Operazioni su corsi, tabelle e righe, sempre limitate ai corsi del proprietario."
   (:require [clojure.string :as str]
             [datomic.client.api :as d]
+            [gradient.cells :as cells]
             [gradient.db :as db])
   (:import (java.text Collator)
            (java.time LocalDate)
@@ -53,8 +54,10 @@
 
 (def course-pattern [:course/id :course/name :course/academic-year :course/degree-program])
 (def table-pattern [:table/id {:table/course [:course/id]} :table/name :table/date :table/location])
+(def cell-pattern [{:cell/column [:column/id]} :cell/flag :cell/grade-base :cell/grade-modifier :cell/text])
+;; `:cell/_row` è un riferimento inverso: le celle che puntano alla riga.
 (def row-pattern [:row/id {:row/table [:table/id]} :row/matricola :row/first-name :row/last-name
-                  :row/email :row/dsa :row/dis])
+                  :row/email :row/dsa :row/dis {:cell/_row cell-pattern}])
 
 (defn course-data [c]
   {:id (str (:course/id c)) :name (:course/name c) :academic-year (:course/academic-year c)
@@ -64,40 +67,68 @@
   {:id (str (:table/id t)) :course-id (str (-> t :table/course :course/id)) :name (:table/name t)
    :date (:table/date t) :location (:table/location t)})
 
+(defn cell-data [{:cell/keys [flag grade-base grade-modifier text] :as cell}]
+  {:column-id (str (-> cell :cell/column :column/id))
+   :display (cond
+              (some? flag) (cells/format-flag flag)
+              grade-base (cells/format-grade grade-base (or grade-modifier ""))
+              :else (or text ""))
+   :flag flag
+   :grade-base (some-> grade-base cells/format-decimal (str/replace "," "."))
+   :grade-modifier (or grade-modifier "")
+   :text text})
+
 (defn row-data [r]
   {:id (str (:row/id r)) :table-id (str (-> r :row/table :table/id)) :matricola (:row/matricola r)
    :first-name (:row/first-name r "") :last-name (:row/last-name r "") :email (:row/email r)
-   :dsa (boolean (:row/dsa r)) :dis (boolean (:row/dis r))})
+   :dsa (boolean (:row/dsa r)) :dis (boolean (:row/dis r))
+   :cells (mapv cell-data (:cell/_row r))})
 
 ;; ---------------------------------------------------------------------------
 ;; Proprietà
 
-(defn- owner-of [db [kind id]]
-  (case kind
-    :course (ffirst (d/q '[:find ?u :in $ ?c :where [?e :course/id ?c] [?e :course/owner ?o] [?o :user/id ?u]] db id))
-    :table (ffirst (d/q '[:find ?u :in $ ?t :where [?e :table/id ?t] [?e :table/course ?c]
-                          [?c :course/owner ?o] [?o :user/id ?u]] db id))))
+(def ^:private course-rules
+  "Regola Datalog `(course-of ?e ?c)`: il corso a cui appartiene un corso, una tabella, una riga o una colonna."
+  '[[(course-of ?e ?c) [?e :course/id] [(identity ?e) ?c]]
+    [(course-of ?e ?c) [?e :table/course ?c]]
+    [(course-of ?e ?c) [?e :row/table ?t] [?t :table/course ?c]]
+    [(course-of ?e ?c) [?e :column/table ?t] [?t :table/course ?c]]])
 
-(defn- require-owned
+(def ^:private id-attribute {:course :course/id :table :table/id :row :row/id :column :column/id})
+
+(defn- owner-of [db [kind id]]
+  (ffirst (d/q '[:find ?u :in $ % ?attribute ?id
+                 :where [?e ?attribute ?id] (course-of ?e ?c) [?c :course/owner ?o] [?o :user/id ?u]]
+               db course-rules (id-attribute kind) id)))
+
+(defn require-owned
   "Elemento inesistente e corso altrui sono indistinguibili per il client."
   [{:keys [user-id]} db entity field]
   (when-not (and user-id (= user-id (owner-of db entity)))
     (throw (input-error field "Elemento non trovato." "NOT_FOUND"))))
 
-(defn- transact [{:keys [conn]} tx-data]
+(defn transact [{:keys [conn]} tx-data]
   (d/transact conn {:tx-data tx-data}))
+
+(defn transact-unique
+  "Come `transact`, ma una violazione di unicità diventa l'errore di input `error`."
+  [store tx-data error]
+  (try
+    (transact store tx-data)
+    (catch clojure.lang.ExceptionInfo e
+      (throw (if (db/unique-conflict? e) error e)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Letture
 
 ;; Ordinamento alfabetico come la collation del database: senza distinguere
 ;; maiuscole e accenti, con l'identificatore come ultimo criterio stabile.
-(def ^:private collator
+(def collator
   (doto (Collator/getInstance Locale/ITALIAN) (.setStrength Collator/PRIMARY)))
 
 (defn- not-zero [n] (when-not (zero? n) n))
 
-(defn- by-keys [ks a b]
+(defn by-keys [ks a b]
   (or (some #(not-zero (.compare ^Collator collator (str (% a)) (str (% b))))
             ks)
       0))
@@ -133,7 +164,7 @@
 ;; ---------------------------------------------------------------------------
 ;; Scritture
 
-(defn- pull-after [{:keys [db-after]} pattern lookup]
+(defn pull-after [{:keys [db-after]} pattern lookup]
   (d/pull db-after pattern lookup))
 
 (defn create-course [{:keys [user-id] :as store} {:keys [name academic-year degree-program]}]
@@ -150,7 +181,8 @@
 
 (defn- table-entity [course-id {:keys [name date location]}]
   (let [location (text location "location" :required false)]
-    (cond-> {:table/id (random-uuid)
+    (cond-> {:db/id "table"
+             :table/id (random-uuid)
              :table/course [:course/id course-id]
              :table/name (text name "name")}
       date (assoc :table/date (date-value date "date"))
@@ -160,7 +192,7 @@
   (let [course-id (identifier course-id "courseId")
         table (table-entity course-id input)]
     (require-owned store (d/db conn) [:course course-id] "courseId")
-    (-> (transact store [table])
+    (-> (transact store (cons table (db/builtin-columns "table")))
         (pull-after table-pattern [:table/id (:table/id table)])
         table-data)))
 
@@ -182,14 +214,9 @@
                                   :first-name (text first-name "firstName" :required false)
                                   :last-name (text last-name "lastName" :required false)})]
     (require-owned store (d/db conn) [:table table-id] "tableId")
-    (try
-      (-> (transact store [row])
-          (pull-after row-pattern [:row/id (:row/id row)])
-          row-data)
-      (catch clojure.lang.ExceptionInfo error
-        (if (db/unique-conflict? error)
-          (throw (input-error "matricola" "Matricola già presente in questa tabella." "DUPLICATE_MATRICOLA"))
-          (throw error))))))
+    (-> (transact-unique store [row] (input-error "matricola" "Matricola già presente in questa tabella." "DUPLICATE_MATRICOLA"))
+        (pull-after row-pattern [:row/id (:row/id row)])
+        row-data)))
 
 (defn import-table
   "Crea la tabella e tutte le righe in un'unica transazione: o tutto o niente."
@@ -197,8 +224,10 @@
   (when (or (seq errors) (empty? rows))
     (throw (input-error "file" "Il CSV contiene errori o non contiene studenti.")))
   (let [course-id (identifier course-id "courseId")
-        table (assoc (table-entity course-id input) :db/id "table")]
+        table (table-entity course-id input)]
     (require-owned store (d/db conn) [:course course-id] "courseId")
-    (-> (transact store (cons table (map #(row-entity (:table/id table) "table" %) rows)))
+    (-> (transact store (concat [table]
+                                (db/builtin-columns "table")
+                                (map #(row-entity (:table/id table) "table" %) rows)))
         (pull-after table-pattern [:table/id (:table/id table)])
         table-data)))

@@ -14,9 +14,11 @@ Nel branch `clojure` sono implementati:
 
 - login Google e UniPi, sessioni revocabili e isolamento dei corsi per proprietario;
 - creazione e lettura di corsi, tabelle e righe studente tramite GraphQL e interfaccia ClojureScript;
-- importazione iniziale CSV con anteprima, associazione delle colonne e salvataggio atomico, con email e flag DSA/DIS.
+- importazione iniziale CSV con anteprima, associazione delle colonne e salvataggio atomico, con email e flag DSA/DIS;
+- colonne personalizzate di tipo flag, voto e testo, con modifica delle celle nella griglia da tastiera, comprese le colonne anagrafiche;
+- viste personali con nome: ordine e visibilità delle colonne, ordinamento delle righe.
 
-Non sono ancora implementati in questo branch colonne personalizzate, modifica delle celle e viste personali, presenti invece nel ramo `main`. Non sono implementati condivisione dei corsi, collegamento account, pannello amministrativo, reimportazioni, codice compito, risposta multipla, formule, riepilogo del corso e collegamenti tra tabelle.
+Non sono ancora implementati condivisione dei corsi, collegamento account, pannello amministrativo, reimportazioni, codice compito, risposta multipla, formule, riepilogo del corso e collegamenti tra tabelle.
 
 ## Accesso
 

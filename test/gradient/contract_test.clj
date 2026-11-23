@@ -1,23 +1,13 @@
 (ns gradient.contract-test
   "Le operazioni scritte nel frontend devono essere valide rispetto a schema.graphql."
-  (:require [clojure.java.io :as io]
-            [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing]]
             [com.walmartlabs.lacinia.parser :as parser]
-            [gradient.graphql :as graphql])
-  (:import (java.io PushbackReader)))
-
-(defn frontend-operations []
-  (with-open [reader (PushbackReader. (io/reader "frontend/src/gradient/ui/api.cljs"))]
-    (binding [*read-eval* false]
-      (->> (repeatedly #(read {:eof nil :read-cond :allow} reader))
-           (take-while some?)
-           (some (fn [form] (when (and (seq? form) (= 'def (first form)) (= 'operations (second form)))
-                              (nth form 2))))))))
+            [gradient.graphql :as graphql]
+            [gradient.ui.operations :refer [operations]]))
 
 (deftest frontend-operations-match-schema
-  (let [schema (graphql/load-schema)
-        operations (frontend-operations)]
-    (is (= 8 (count operations)))
+  (let [schema (graphql/load-schema)]
+    (is (= 15 (count operations)))
     (doseq [[k query] operations]
       (testing (name k)
         (is (some? (parser/parse-query schema query)))))))

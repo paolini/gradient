@@ -41,7 +41,9 @@
         busy! (fn [value] (swap! state assoc :busy value) (on-busy value))
         inspect (fn [content mapping]
                   (-> (api/graphql :preview-csv {:input (cond-> {:contentBase64 content} mapping (assoc :mapping mapping))})
-                      (.then :previewCsv)))
+                      ;; Non `(.then :previewCsv)`: una keyword non è una funzione JavaScript
+                      ;; e Promise.then la ignorerebbe, restituendo l'intera risposta.
+                      (.then #(:previewCsv %))))
         upload (fn [file]
                  (let [current (swap! version inc)]
                    (swap! state assoc :preview nil :content "" :issues [] :error "" :filename (if file (.-name file) ""))

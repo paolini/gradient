@@ -1,15 +1,6 @@
 (ns gradient.ui.api
-  "Chiamate GraphQL e operazioni usate dall'interfaccia (verificate dai test sullo schema).")
-
-(def operations
-  {:courses "query Courses { courses { id name academicYear degreeProgram } }"
-   :tables "query Tables($courseId: ID!) { courseTables(courseId: $courseId) { id courseId name date location } }"
-   :rows "query Rows($tableId: ID!) { studentRows(tableId: $tableId) { id tableId matricola firstName lastName email dsa dis } }"
-   :create-course "mutation CreateCourse($input: CreateCourseInput!) { createCourse(input: $input) { course { id name academicYear degreeProgram } errors { field code message } } }"
-   :create-table "mutation CreateTable($input: CreateTableInput!) { createTable(input: $input) { table { id courseId name date location } errors { field code message } } }"
-   :add-student "mutation AddStudent($input: AddStudentInput!) { addStudent(input: $input) { row { id tableId matricola firstName lastName email dsa dis } errors { field code message } } }"
-   :preview-csv "mutation PreviewCsv($input: PreviewCsvInput!) { previewCsv(input: $input) { headers mapping { matricola lastName firstName email dsa dis } totalRows rows { matricola firstName lastName email dsa dis } errors { row field message } warnings { row field message } delimiter headerRow } }"
-   :import-csv "mutation ImportCsv($input: ImportCsvInput!) { importCsvTable(input: $input) { table { id courseId name date location } importedCount errors { row field message } warnings { row field message } } }"})
+  "Chiamate GraphQL; le operazioni sono in `gradient.ui.operations`."
+  (:require [gradient.ui.operations :refer [operations]]))
 
 (defn- fail [message] (throw (js/Error. message)))
 

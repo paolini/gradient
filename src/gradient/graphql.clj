@@ -9,9 +9,11 @@
             [com.walmartlabs.lacinia.resolve :as resolve]
             [com.walmartlabs.lacinia.schema :as schema]
             [com.walmartlabs.lacinia.util :as util]
+            [gradient.columns :as columns]
             [gradient.csv-import :as csv]
             [gradient.db :as db]
-            [gradient.store :as store])
+            [gradient.store :as store]
+            [gradient.views :as views])
   (:import (java.time LocalDate)))
 
 ;; Il client usa camelCase, il codice Clojure kebab-case: si converte al confine.
@@ -48,11 +50,13 @@
           :else (unexpected-failure error))))))
 
 (defn- mutate
-  "Scritture: gli errori di input fanno parte del risultato (`errors`), non della risposta GraphQL."
+  "Scritture: gli errori di input fanno parte del risultato (`errors`), non della risposta GraphQL.
+  `f` riceve l'argomento `input` oppure, se manca, tutti gli argomenti (per esempio `{:column-id ...}`)."
   [field f]
   (fn [context args _]
     (try
-      (->client {field (f (:store context) (:input (->clojure args))) :errors []})
+      (let [args (->clojure args)]
+        (->client {field (f (:store context) (get args :input args)) :errors []}))
       (catch Exception error
         (cond
           (store/input-error? error)
@@ -92,11 +96,20 @@
    :Query/courses (query (fn [s _] (store/courses s)))
    :Query/courseTables (query (fn [s {:keys [course-id]}] (store/tables s course-id)))
    :Query/studentRows (query (fn [s {:keys [table-id]}] (store/rows s table-id)))
+   :Query/tableColumns (query (fn [s {:keys [table-id]}] (columns/columns s table-id)))
+   :Query/tableViews (query (fn [s {:keys [table-id]}] (views/views s table-id)))
    :Mutation/previewCsv preview-csv
    :Mutation/importCsvTable import-csv-table
    :Mutation/createCourse (mutate :course store/create-course)
    :Mutation/createTable (mutate :table store/create-table)
-   :Mutation/addStudent (mutate :row store/add-student)})
+   :Mutation/addStudent (mutate :row store/add-student)
+   :Mutation/addColumn (mutate :column columns/add-column)
+   :Mutation/updateColumn (mutate :column columns/update-column)
+   :Mutation/deleteColumn (mutate :column columns/delete-column)
+   :Mutation/setCell (mutate :row columns/set-cell)
+   :Mutation/saveTableView (mutate :view views/save-view)
+   :Mutation/selectTableView (mutate :view views/select-view)
+   :Mutation/deleteTableView (mutate :views views/delete-view)})
 
 (def date-scalar
   {:parse (fn [value]

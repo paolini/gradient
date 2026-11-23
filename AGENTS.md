@@ -1,6 +1,6 @@
 # Indicazioni per gli agenti
 
-Questo branch (`clojure`) è una riscrittura sperimentale in Clojure/ClojureScript con Datomic Local delle funzionalità di `main` al commit `d6d9b19`. Non ha storia in comune con `main` e non va unito a esso.
+Questo branch (`clojure`) è una riscrittura sperimentale in Clojure/ClojureScript con Datomic Local delle funzionalità di `main` al commit `64df627`. Non ha storia in comune con `main` e non va unito a esso.
 
 Leggere [DOCUMENTATION.md](DOCUMENTATION.md) (requisiti funzionali, condivisi con `main`) e [DEVELOPMENT.md](DEVELOPMENT.md) (implementazione e differenze rispetto a `main`). Mantenere la documentazione in italiano e distinguere le decisioni accettate dalle proposte.
 
