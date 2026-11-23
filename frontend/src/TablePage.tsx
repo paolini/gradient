@@ -90,10 +90,13 @@ export default function TablePage({ courseId, tableId }: { courseId: string; tab
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const viewIdRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  // Selezione temporanea delle righe: non viene salvata e non fa parte della vista.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
-    setData(null); setLoadError('');
+    setData(null); setLoadError(''); setSelected(new Set());
     graphql<TableData>(operations.tableData, { tableId }).then(
       result => { if (!active) return; setData(result); },
       failure => { if (active) setLoadError(message(failure, 'Caricamento non riuscito.')); },
@@ -229,6 +232,25 @@ export default function TablePage({ courseId, tableId }: { courseId: string; tab
     } catch (failure) { setError(message(failure, 'Impossibile eliminare la colonna.')); }
   }
 
+  async function deleteSelected() {
+    if (!data) return;
+    const rows = data.studentRows.filter(row => selected.has(row.id));
+    if (!rows.length) return;
+    const names = rows.slice(0, 5).map(row => `• ${[row.lastName, row.firstName].filter(Boolean).join(' ') || 'senza nome'}${row.matricola ? ` (${row.matricola})` : ''}`);
+    if (rows.length > 5) names.push(`… e altri ${rows.length - 5}`);
+    const subject = rows.length === 1 ? 'lo studente selezionato' : `i ${rows.length} studenti selezionati`;
+    if (!window.confirm(`Rimuovere da questa tabella ${subject}, con tutti i loro valori?\n\n${names.join('\n')}\n\nLe altre tabelle del corso non vengono modificate. L'operazione non può essere annullata.`)) return;
+    setError(''); setDeleting(true);
+    try {
+      const result = await graphql<{ deleteStudents: MutationResult<{ deletedIds: string[] | null }> }>(operations.deleteStudents, { input: { tableId, rowIds: rows.map(row => row.id) } });
+      const removed = new Set(requireSuccess(result.deleteStudents).deletedIds ?? []);
+      setData(current => current && { ...current, studentRows: current.studentRows.filter(row => !removed.has(row.id)) });
+      setRowOrder(order => order.filter(id => !removed.has(id)));
+      setSelected(current => new Set([...current].filter(id => !removed.has(id))));
+    } catch (failure) { setError(message(failure, 'Impossibile rimuovere gli studenti.')); }
+    finally { setDeleting(false); }
+  }
+
   function columnSaved(column: TableColumn) {
     setData(current => {
       if (!current) return current;
@@ -282,8 +304,14 @@ export default function TablePage({ courseId, tableId }: { courseId: string; tab
         <span className="spacer" />
         <button type="button" onClick={() => setDialog({ type: 'add-column' })}>+ Colonna</button>
       </div>
+      {selected.size > 0 && <div className="selection-bar" role="region" aria-label="Righe selezionate">
+        <strong>{selected.size === 1 ? '1 studente selezionato' : `${selected.size} studenti selezionati`}</strong>
+        <button type="button" className="secondary small" onClick={() => setSelected(new Set())}>Deseleziona</button>
+        <span className="spacer" />
+        <button type="button" className="secondary small danger" disabled={deleting} onClick={() => void deleteSelected()}>{deleting ? 'Rimozione…' : 'Rimuovi dalla tabella…'}</button>
+      </div>}
       {visibleColumns.length
-        ? <Grid columns={visibleColumns} rows={orderedRows} onCommit={commitCell}
+        ? <Grid columns={visibleColumns} rows={orderedRows} onCommit={commitCell} selected={selected} onSelect={setSelected}
             header={column => <div className="column-header">
               <button type="button" className="sort-button" onClick={() => sortBy(column)} title="Ordina per questa colonna">
                 {column.name}{sort?.columnId === column.id ? (sort.descending ? ' ▼' : ' ▲') : ''}
@@ -302,7 +330,7 @@ export default function TablePage({ courseId, tableId }: { courseId: string; tab
         setData(current => current && { ...current, studentRows: [...current.studentRows, row] });
         setRowOrder(order => [...order, row.id]);
       }} hasNameColumns={visibleColumns.some(column => ['MATRICOLA', 'LAST_NAME', 'FIRST_NAME'].includes(column.kind))} />
-      <p className="hint">Frecce per spostarsi · Invio o digitazione per modificare · Invio/Tab per confermare · Esc per annullare · Canc per svuotare</p>
+      <p className="hint">Frecce per spostarsi · Invio o digitazione per modificare · Invio/Tab per confermare · Esc per annullare · Canc per svuotare · Maiusc+Spazio o casella per selezionare la riga, Maiusc+frecce o Maiusc+clic per un intervallo, Ctrl+A per tutte</p>
     </>}
     {dialog?.type === 'add-column' && <ColumnDialog tableId={tableId} onSaved={columnSaved} onClose={() => setDialog(null)} />}
     {dialog?.type === 'edit-column' && <ColumnDialog tableId={tableId} column={dialog.column} onSaved={columnSaved} onClose={() => setDialog(null)} />}

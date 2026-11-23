@@ -283,3 +283,44 @@ def test_database_rejects_cells_without_value(users):
             session.add(Cell(row_id=row["id"], column_id=note["id"]))
     with pytest.raises((IntegrityError, OperationalError)):
         client.portal.call(insert_empty)
+
+
+def delete_students(client, table_id, row_ids):
+    return gql(client, "mutation($input: DeleteStudentsInput!) { deleteStudents(input: $input) { deletedIds errors { field code message } } }",
+               input={"tableId": table_id, "rowIds": row_ids})["deleteStudents"]
+
+
+def row_ids(client, table_id):
+    return {row["id"] for row in gql(client, "query($id: ID!) { studentRows(tableId: $id) { id } }", id=table_id)["studentRows"]}
+
+
+def test_delete_students_removes_rows_and_cells_only_from_their_table(users):
+    client, owner, other = users
+    client.cookies.set(COOKIE, owner)
+    course_id, table_id = setup_table(client)
+    second = gql(client, "mutation($id: ID!) { createTable(input: {courseId: $id, name: \"Scritto\"}) { table { id } } }", id=course_id)["createTable"]["table"]["id"]
+    grade = add_column(client, table_id, "GRADE", "Voto")["column"]
+    first, kept, unnamed = add_student(client, table_id, "001"), add_student(client, table_id, "002"), add_student(client, table_id, None)
+    same_student = add_student(client, second, "001")
+    assert set_cell(client, first["id"], grade["id"], "7")["errors"] == []
+
+    # Lista vuota, righe di un'altra tabella o inesistenti: non si rimuove nulla.
+    assert delete_students(client, table_id, []) == {"deletedIds": [], "errors": []}
+    assert delete_students(client, table_id, [first["id"], same_student["id"]])["errors"][0]["code"] == "NOT_FOUND"
+    assert delete_students(client, table_id, [first["id"], str(uuid4())])["errors"][0]["code"] == "NOT_FOUND"
+    assert row_ids(client, table_id) == {first["id"], kept["id"], unnamed["id"]}
+
+    # Un altro utente non può rimuovere righe dei corsi altrui.
+    client.cookies.set(COOKIE, other)
+    assert delete_students(client, table_id, [first["id"]])["errors"][0]["code"] == "NOT_FOUND"
+    assert delete_students(client, table_id, [])["errors"][0]["code"] == "NOT_FOUND"
+    client.cookies.set(COOKIE, owner)
+
+    result = delete_students(client, table_id, [first["id"], unnamed["id"], first["id"]])
+    assert result["errors"] == [] and set(result["deletedIds"]) == {first["id"], unnamed["id"]}
+    assert row_ids(client, table_id) == {kept["id"]}
+    assert count_cells(client, grade["id"]) == 0
+    # La stessa matricola nelle altre tabelle del corso resta invariata.
+    assert row_ids(client, second) == {same_student["id"]}
+    # La matricola si può aggiungere di nuovo come nuova riga.
+    assert add_student(client, table_id, "001")["id"] != first["id"]

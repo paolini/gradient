@@ -21,7 +21,7 @@ def test_exported_schema_and_frontend_operations():
     block = source[source.index("export const operations = {"):]
     block = block[:block.index("\n};")]
     operations = [match[1] for match in re.findall(r"^  \w+: (['`])(.*?)\1,?$", block, flags=re.MULTILINE)]
-    assert len(operations) == len(re.findall(r"^  \w+:", block, flags=re.MULTILINE)) == 23
+    assert len(operations) == len(re.findall(r"^  \w+:", block, flags=re.MULTILINE)) == 24
     for operation in operations:
         operation = re.sub(r"\$\{(\w+)\}", lambda match: fragments[match[1]], operation)
         assert not validate(schema._schema, parse(operation)), operation

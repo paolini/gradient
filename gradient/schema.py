@@ -271,6 +271,18 @@ class UpdateColumnInput:
 
 
 @strawberry.input
+class DeleteStudentsInput:
+    table_id: strawberry.ID
+    row_ids: list[strawberry.ID]
+
+
+@strawberry.type
+class DeleteStudentsResult:
+    deleted_ids: list[strawberry.ID] | None = None
+    errors: list[FieldError] = strawberry.field(default_factory=list)
+
+
+@strawberry.input
 class SetCellInput:
     row_id: strawberry.ID
     column_id: strawberry.ID
@@ -628,6 +640,11 @@ class Mutation:
     @strawberry.mutation
     async def add_student(self, info: Info, input: AddStudentInput) -> StudentResult:
         return await mutate(info.context["store"].add_student(str(input.table_id), input.matricola, input.first_name, input.last_name), StudentResult, "row", student_type)
+
+    @strawberry.mutation(description="Rimuove studenti da una tabella, con le loro celle, senza modificare le altre tabelle. Tutto o niente.")
+    async def delete_students(self, info: Info, input: DeleteStudentsInput) -> DeleteStudentsResult:
+        operation = info.context["store"].delete_students(str(input.table_id), [str(item) for item in input.row_ids])
+        return await mutate(operation, DeleteStudentsResult, "deleted_ids", lambda ids: [strawberry.ID(item) for item in ids])
 
     @strawberry.mutation
     async def add_column(self, info: Info, input: AddColumnInput) -> ColumnResult:

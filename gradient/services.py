@@ -267,6 +267,26 @@ class Store:
             await session.delete(column)
         return column
 
+    # Rimozione di studenti
+
+    async def delete_students(self, table_id: str, row_ids: list[str]) -> list[str]:
+        """Rimuove le righe dalla tabella insieme alle loro celle; le altre tabelle non cambiano.
+
+        L'operazione è atomica: se una riga non appartiene alla tabella non si rimuove nulla.
+        Una lista vuota non ha effetti, ma la tabella deve comunque essere accessibile."""
+        table_id = identifier(table_id, "tableId")
+        ids = list(dict.fromkeys(identifier(row_id, "rowIds") for row_id in row_ids))
+        async with self.database.sessions.begin() as session:
+            await self.require(session, CourseTable, table_id, "tableId")
+            if not ids:
+                return []
+            found = set(await session.scalars(select(StudentRow.id).where(StudentRow.table_id == table_id, StudentRow.id.in_(ids))))
+            if len(found) != len(ids):
+                raise InputError("rowIds", "Alcuni studenti non sono più presenti nella tabella. Ricaricare la pagina.", "NOT_FOUND")
+            await session.execute(delete(Cell).where(Cell.row_id.in_(ids)))
+            await session.execute(delete(StudentRow).where(StudentRow.id.in_(ids)))
+        return ids
+
     # Celle
 
     async def set_cell(self, row_id: str, column_id: str, value: str):

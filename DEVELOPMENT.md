@@ -81,7 +81,7 @@ Il segreto (`gradient_` seguito da 32 byte casuali) è restituito soltanto da `c
 
 Il contratto è dichiarato in `gradient/schema.py` ed esportato in [schema.graphql](schema.graphql) con `make schema`. Le operazioni frontend sono in `frontend/src/api.ts`; i test ne verificano la validità rispetto allo schema e controllano che il file esportato sia aggiornato.
 
-Le operazioni disponibili sono `me` (profilo autenticato), `courses`, `courseTables`, `studentRows`, `tableColumns`, `tableViews`, `createCourse`, `createTable`, `addStudent`, `addColumn`, `updateColumn`, `deleteColumn`, `setCell`, `saveTableView`, `selectTableView`, `deleteTableView`, `exercises`, `exercise`, `exercisePreview`, `saveExercise`, `deleteExercise`, `previewCsv` e `importCsvTable`. Le operazioni frontend possono comporre frammenti condivisi (`ROW`, `COLUMN`, `VIEW` in `api.ts`), espansi dal test del contratto.
+Le operazioni disponibili sono `me` (profilo autenticato), `courses`, `courseTables`, `studentRows`, `tableColumns`, `tableViews`, `createCourse`, `createTable`, `addStudent`, `deleteStudents`, `addColumn`, `updateColumn`, `deleteColumn`, `setCell`, `saveTableView`, `selectTableView`, `deleteTableView`, `exercises`, `exercise`, `exercisePreview`, `saveExercise`, `deleteExercise`, `previewCsv` e `importCsvTable`. Le operazioni frontend possono comporre frammenti condivisi (`ROW`, `COLUMN`, `VIEW` in `api.ts`), espansi dal test del contratto.
 
 `setCell` riceve il testo digitato e lo interpreta sul server secondo il tipo della colonna (`gradient/cells.py`): voti con virgola o punto e modificatori `+`, `-`, `L` o «e lode», flag `sì/no` (anche `s/n`, `x`, `1/0`), testo. Il testo vuoto svuota la cella. Sulle colonne anagrafiche aggiorna i campi della riga; DSA e DIS restano a due stati. La risposta contiene la riga aggiornata con tutte le sue celle. Le mutazioni restituiscono errori di validazione con campo, codice e messaggio; l'importazione indica anche la riga del CSV. Gli ID inesistenti e le matricole duplicate vengono segnalati senza salvare righe parziali. Gli anni accademici accettano `2026/27` o `2026/2027` e vengono memorizzati nella forma completa. Matricole vuote diventano valori mancanti, mentre gli zeri iniziali vengono conservati.
 
@@ -116,7 +116,7 @@ make test     # contratto, configurazione e validazione, senza database
 make test-db  # integrazione sulla MariaDB configurata, dopo make migrate
 ```
 
-I test di integrazione creano corsi temporanei e rimuovono soltanto i propri dati al termine. Verificano persistenza tra istanze dell'applicazione, unicità delle matricole per tabella, più matricole mancanti, indipendenza dei nomi tra tabelle, rollback dell'importazione, sessioni reali, separazione degli account con la stessa email, isolamento dei corsi, logout e scadenza, token API completi e in sola lettura, revoca e scadenza dei token. Non creano né avviano database: utilizzare un database di sviluppo.
+I test di integrazione creano corsi temporanei e rimuovono soltanto i propri dati al termine. Verificano persistenza tra istanze dell'applicazione, unicità delle matricole per tabella, più matricole mancanti, indipendenza dei nomi tra tabelle, rollback dell'importazione, rimozione atomica di studenti limitata alla tabella, sessioni reali, separazione degli account con la stessa email, isolamento dei corsi, logout e scadenza, token API completi e in sola lettura, revoca e scadenza dei token. Non creano né avviano database: utilizzare un database di sviluppo.
 
 ## Immagine Docker
 

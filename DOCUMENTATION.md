@@ -82,7 +82,14 @@ Sono supportati UTF-8 (anche con BOM) e Windows-1252, separatori punto e virgola
 
 Il [CSV di esempio](examples/unipi-iscritti.csv), con 14 studenti fittizi, è stato controllato e approvato dal committente per il repository e i test. L'originale non è incluso. Il file caricato viene letto in memoria e non viene conservato né scritto nei log. L'anteprima non richiede accesso al database.
 
-L'importazione crea sempre una nuova tabella: reimportazioni e aggiornamenti di tabelle esistenti restano da progettare. È già possibile aggiungere manualmente studenti; rimozioni e modifica dei flag dall'interfaccia restano da implementare. La futura rimozione da una tabella non dovrà cancellare i dati nelle altre tabelle.
+L'importazione crea sempre una nuova tabella: reimportazioni e aggiornamenti di tabelle esistenti restano da progettare. È già possibile aggiungere manualmente studenti e rimuoverli; la modifica dei flag dall'interfaccia resta da implementare.
+
+Selezione e rimozione delle righe (implementate):
+
+- nella griglia si selezionano righe intere con la casella accanto al numero di riga o con Maiusc+Spazio; Maiusc+clic e Maiusc+frecce selezionano un intervallo, Ctrl+A tutte le righe, Esc annulla la selezione. La selezione è temporanea: non si salva, non fa parte della vista e si conserva se cambia l'ordinamento;
+- una barra indica quante righe sono selezionate e offre le azioni disponibili; per ora soltanto «Rimuovi dalla tabella», con conferma che elenca gli studenti;
+- la rimozione elimina le righe e tutte le loro celle soltanto dalla tabella corrente: le righe con la stessa matricola nelle altre tabelle del corso non cambiano. È tutto o niente: se una riga non appartiene più alla tabella non si rimuove nulla. Non è prevista una funzione di annullamento;
+- altre azioni sulla selezione (copia, impostazione di un valore su più righe) e la selezione di intervalli di celle restano proposte da concordare.
 
 ## Tabelle delle prove
 

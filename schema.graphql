@@ -163,6 +163,16 @@ scalar Date
 """Date with time (isoformat)"""
 scalar DateTime
 
+input DeleteStudentsInput {
+  tableId: ID!
+  rowIds: [ID!]!
+}
+
+type DeleteStudentsResult {
+  deletedIds: [ID!]
+  errors: [FieldError!]!
+}
+
 type Exercise {
   id: ID!
   title: String!
@@ -235,6 +245,11 @@ type Mutation {
   createCourse(input: CreateCourseInput!): CourseResult!
   createTable(input: CreateTableInput!): TableResult!
   addStudent(input: AddStudentInput!): StudentResult!
+
+  """
+  Rimuove studenti da una tabella, con le loro celle, senza modificare le altre tabelle. Tutto o niente.
+  """
+  deleteStudents(input: DeleteStudentsInput!): DeleteStudentsResult!
   addColumn(input: AddColumnInput!): ColumnResult!
   updateColumn(input: UpdateColumnInput!): ColumnResult!
   deleteColumn(columnId: ID!): ColumnResult!

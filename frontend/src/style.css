@@ -95,7 +95,8 @@ td, th { padding: 11px 15px; border-bottom: 1px solid #e4eae7; }
 
 /* Pagina della tabella */
 .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-.toolbar .spacer { flex: 1; }
+.toolbar .spacer, .selection-bar .spacer { flex: 1; }
+.selection-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; padding: 8px 12px; background: #eef4f2; border: 1px solid #b8c8c2; border-radius: 10px; font-size: 14px; }
 label.inline { flex-direction: row; align-items: center; gap: 8px; margin: 0; }
 label.inline select { width: auto; padding: 8px 10px; }
 .menu { position: relative; display: inline-block; }
@@ -110,6 +111,11 @@ label.inline select { width: auto; padding: 8px 10px; }
 .grid { font-size: 14px; }
 .grid th { padding: 0; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
 .grid td { padding: 8px 12px; white-space: nowrap; cursor: cell; outline: none; }
+.grid .row-head { width: 1%; padding: 0 8px 0 10px; color: #71817d; font-size: 12px; text-align: right; cursor: default; }
+.grid .row-head label { flex-direction: row; align-items: center; gap: 6px; margin: 0; font-weight: 400; cursor: pointer; }
+.grid .row-head input { width: auto; margin: 0; cursor: pointer; }
+.grid tr.selected td { background: #eef4f2; }
+.grid tr.selected td.row-head { color: #21634f; font-weight: 700; }
 .grid td.active { box-shadow: inset 0 0 0 2px #21634f; background: #f6fbf9; }
 .grid td.saving { color: #71817d; }
 .grid td.error { background: #fff0ec; box-shadow: inset 0 0 0 2px #c4502e; }

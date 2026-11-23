@@ -54,6 +54,7 @@ export const operations = {
   createCourse: 'mutation CreateCourse($input: CreateCourseInput!) { createCourse(input: $input) { course { id name academicYear degreeProgram } errors { field code message } } }',
   createTable: 'mutation CreateTable($input: CreateTableInput!) { createTable(input: $input) { table { id courseId name date location } errors { field code message } } }',
   addStudent: `mutation AddStudent($input: AddStudentInput!) { addStudent(input: $input) { row { ${ROW} } errors { field code message } } }`,
+  deleteStudents: 'mutation DeleteStudents($input: DeleteStudentsInput!) { deleteStudents(input: $input) { deletedIds errors { field code message } } }',
   setCell: `mutation SetCell($input: SetCellInput!) { setCell(input: $input) { row { ${ROW} } errors { field code message } } }`,
   addColumn: `mutation AddColumn($input: AddColumnInput!) { addColumn(input: $input) { column { ${COLUMN} } errors { field code message } } }`,
   updateColumn: `mutation UpdateColumn($input: UpdateColumnInput!) { updateColumn(input: $input) { column { ${COLUMN} } errors { field code message } } }`,
