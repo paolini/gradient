@@ -5,21 +5,26 @@ from uuid import UUID
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import aliased
 
 from gradient.cells import (
     BUILTIN_KINDS, BUILTIN_NAMES, CUSTOM_KINDS, CellError, GradeScale,
     grade_violation, parse_decimal, parse_flag, parse_grade, parse_text,
 )
 from gradient.database import Database
-from gradient.models import Cell, Course, CourseTable, StudentRow, TableColumn, TableView, new_id
+from gradient.models import Cell, Course, CourseTable, Exercise, ExerciseVariant, StudentRow, TableColumn, TableView, new_id
 from gradient.csv_import import Preview
 
 DEFAULT_SORT = [{"column": "last_name", "descending": False}, {"column": "first_name", "descending": False}]
 
 
 DEFAULT_VIEW_NAME = "Predefinita"
+MAX_VARIANTS = 20
+MIN_OPTIONS, MAX_OPTIONS = 2, 10
+MAX_TYPST_TEXT = 20000
+MAX_TYPST_OPTION = 5000
 
 
 @dataclass
@@ -407,3 +412,92 @@ class Store:
             await session.flush()
             columns = await self.load_columns(session, table_id)
             return self.effective_views(columns, await self.saved_views(session, table_id))
+
+    # Archivio degli esercizi
+
+    def require_user(self):
+        if not self.user_id:
+            raise InputError("user", "L'archivio degli esercizi richiede un utente autenticato.", "NOT_FOUND")
+
+    async def require_exercise(self, session, exercise_id: str) -> Exercise:
+        self.require_user()
+        exercise = await session.get(Exercise, identifier(exercise_id, "id"))
+        if exercise is None or exercise.owner_id != self.user_id:
+            raise InputError("id", "Esercizio non trovato.", "NOT_FOUND")
+        return exercise
+
+    async def exercises(self, search: str | None = None):
+        self.require_user()
+        query = (select(Exercise, func.count(ExerciseVariant.id))
+                 .outerjoin(ExerciseVariant, ExerciseVariant.exercise_id == Exercise.id)
+                 .where(Exercise.owner_id == self.user_id)
+                 .group_by(Exercise.id).order_by(Exercise.updated_at.desc(), Exercise.id))
+        words = (search or "").split()
+        for word in words[:10]:
+            pattern = "%" + word.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            searched = aliased(ExerciseVariant)
+            in_variants = exists().where(searched.exercise_id == Exercise.id, or_(
+                searched.text.like(pattern), func.json_unquote(searched.options).like(pattern)))
+            query = query.where(or_(Exercise.title.like(pattern), in_variants))
+        async with self.database.sessions() as session:
+            return [(exercise, count) for exercise, count in await session.execute(query)]
+
+    async def exercise(self, exercise_id: str):
+        async with self.database.sessions() as session:
+            exercise = await self.require_exercise(session, exercise_id)
+            return exercise, await self.load_variants(session, exercise.id)
+
+    @staticmethod
+    async def load_variants(session, exercise_id: str) -> list[ExerciseVariant]:
+        return list(await session.scalars(select(ExerciseVariant).where(ExerciseVariant.exercise_id == exercise_id).order_by(ExerciseVariant.position)))
+
+    @staticmethod
+    def validate_variants(variants: list[dict]) -> list[dict]:
+        if not variants:
+            raise InputError("variants", "Un esercizio deve avere almeno una variante.")
+        if len(variants) > MAX_VARIANTS:
+            raise InputError("variants", f"Al massimo {MAX_VARIANTS} varianti per esercizio.")
+        cleaned = []
+        for index, variant in enumerate(variants):
+            prefix = f"variants.{index}"
+            body = variant["text"].strip()
+            if not body:
+                raise InputError(f"{prefix}.text", f"Variante {index + 1}: il testo è obbligatorio.")
+            if len(body) > MAX_TYPST_TEXT:
+                raise InputError(f"{prefix}.text", f"Variante {index + 1}: al massimo {MAX_TYPST_TEXT} caratteri.")
+            options = [option.strip() for option in variant["options"]]
+            if not MIN_OPTIONS <= len(options) <= MAX_OPTIONS:
+                raise InputError(f"{prefix}.options", f"Variante {index + 1}: servono da {MIN_OPTIONS} a {MAX_OPTIONS} risposte.")
+            for position, option in enumerate(options):
+                if not option:
+                    raise InputError(f"{prefix}.options.{position}", f"Variante {index + 1}: la risposta {chr(65 + position)} è vuota.")
+                if len(option) > MAX_TYPST_OPTION:
+                    raise InputError(f"{prefix}.options.{position}", f"Variante {index + 1}: la risposta {chr(65 + position)} supera {MAX_TYPST_OPTION} caratteri.")
+            correct = variant["correct"]
+            if not isinstance(correct, int) or not 0 <= correct < len(options):
+                raise InputError(f"{prefix}.correct", f"Variante {index + 1}: indicare la risposta corretta.")
+            cleaned.append({"text": body, "options": options, "correct": correct})
+        return cleaned
+
+    async def save_exercise(self, exercise_id: str | None, title: str, variants: list[dict]):
+        self.require_user()
+        title = text(title, "title")
+        cleaned = self.validate_variants(variants)
+        async with self.database.sessions.begin() as session:
+            if exercise_id is None:
+                exercise = Exercise(id=new_id(), owner_id=self.user_id, created_at=now())
+                session.add(exercise)
+            else:
+                exercise = await self.require_exercise(session, exercise_id)
+                # Le varianti si sostituiscono in blocco: i compiti ne conservano una copia propria.
+                await session.execute(delete(ExerciseVariant).where(ExerciseVariant.exercise_id == exercise.id))
+            exercise.title, exercise.updated_at = title, now()
+            saved = [ExerciseVariant(id=new_id(), exercise_id=exercise.id, position=index, **variant) for index, variant in enumerate(cleaned)]
+            session.add_all(saved)
+        return exercise, saved
+
+    async def delete_exercise(self, exercise_id: str):
+        async with self.database.sessions.begin() as session:
+            exercise = await self.require_exercise(session, exercise_id)
+            await session.delete(exercise)
+        return exercise, []

@@ -1,5 +1,5 @@
 import logging
-from datetime import date as Date
+from datetime import date as Date, datetime
 from enum import Enum
 from pathlib import Path
 
@@ -13,6 +13,7 @@ from gradient.cells import GradeScale as GradeScaleData, format_decimal, format_
 from gradient.database import database_error_details
 from gradient.csv_import import FIELDS, Mapping, preview_csv
 from gradient.services import InputError
+from gradient.typst_render import TypstRenderError, render_variant
 
 logger = logging.getLogger(__name__)
 
@@ -399,6 +400,84 @@ async def mutate(operation, result_type, field, convert):
 
 
 @strawberry.type
+class ExerciseVariant:
+    id: strawberry.ID
+    text: str = strawberry.field(description="Testo della domanda in Typst.")
+    options: list[str] = strawberry.field(description="Risposte in Typst, nell'ordine base (A, B, C…).")
+    correct: int = strawberry.field(description="Indice della risposta corretta, da 0.")
+
+
+@strawberry.type
+class Exercise:
+    id: strawberry.ID
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    variants: list[ExerciseVariant]
+
+
+@strawberry.type
+class ExerciseSummary:
+    id: strawberry.ID
+    title: str
+    updated_at: datetime
+    variant_count: int
+
+
+@strawberry.type
+class ExerciseResult:
+    exercise: Exercise | None = None
+    errors: list[FieldError] = strawberry.field(default_factory=list)
+
+
+@strawberry.input
+class ExerciseVariantInput:
+    text: str
+    options: list[str]
+    correct: int
+
+
+@strawberry.input
+class SaveExerciseInput:
+    id: strawberry.ID | None = strawberry.field(default=None, description="Assente per creare un nuovo esercizio.")
+    title: str
+    variants: list[ExerciseVariantInput]
+
+
+@strawberry.type
+class TypstIssue:
+    field: str = strawberry.field(description="text oppure options.N")
+    message: str
+    line: int | None
+    column: int | None
+
+
+@strawberry.type
+class TypstPreview:
+    pages: list[str] = strawberry.field(description="Pagine SVG; da mostrare come immagini, non da inserire nel DOM.")
+    errors: list[TypstIssue]
+
+
+def exercise_type(pair):
+    exercise, variants = pair
+    return Exercise(
+        id=strawberry.ID(exercise.id), title=exercise.title, created_at=exercise.created_at, updated_at=exercise.updated_at,
+        variants=[ExerciseVariant(id=strawberry.ID(variant.id), text=variant.text, options=list(variant.options), correct=variant.correct) for variant in variants],
+    )
+
+
+async def preview_variant(variant: ExerciseVariantInput) -> TypstPreview:
+    if len(variant.text) > 20000 or len(variant.options) > 10 or any(len(option) > 5000 for option in variant.options):
+        return TypstPreview(pages=[], errors=[TypstIssue(field="text", message="Testo troppo lungo per l'anteprima.", line=None, column=None)])
+    correct = variant.correct if 0 <= variant.correct < len(variant.options) else None
+    try:
+        pages = await to_thread.run_sync(lambda: render_variant(variant.text, list(variant.options), correct))
+    except TypstRenderError as error:
+        return TypstPreview(pages=[], errors=[TypstIssue(**vars(issue)) for issue in error.issues])
+    return TypstPreview(pages=pages, errors=[])
+
+
+@strawberry.type
 class User:
     id: strawberry.ID
     name: str
@@ -428,6 +507,19 @@ class Query:
     @strawberry.field
     async def table_columns(self, info: Info, table_id: strawberry.ID) -> list[TableColumn]:
         return [column_type(column) for column in await execute(info.context["store"].columns(str(table_id)))]
+
+    @strawberry.field(description="Esercizi dell'archivio personale, dal più recente; la ricerca considera titolo, testi e risposte.")
+    async def exercises(self, info: Info, search: str | None = None) -> list[ExerciseSummary]:
+        rows = await execute(info.context["store"].exercises(search))
+        return [ExerciseSummary(id=strawberry.ID(exercise.id), title=exercise.title, updated_at=exercise.updated_at, variant_count=count) for exercise, count in rows]
+
+    @strawberry.field
+    async def exercise(self, info: Info, id: strawberry.ID) -> Exercise:
+        return exercise_type(await execute(info.context["store"].exercise(str(id))))
+
+    @strawberry.field(description="Compila in SVG una variante non ancora salvata, per l'anteprima.")
+    async def exercise_preview(self, variant: ExerciseVariantInput) -> TypstPreview:
+        return await preview_variant(variant)
 
     @strawberry.field(description="Viste personali dell'utente: ordine e visibilità delle colonne, ordinamento delle righe.")
     async def table_views(self, info: Info, table_id: strawberry.ID) -> list[TableView]:
@@ -494,6 +586,16 @@ class Mutation:
         sort = [{"column": str(item.column_id), "descending": item.descending} for item in input.row_sort]
         operation = info.context["store"].save_view(str(input.table_id), str(input.view_id) if input.view_id else None, input.name, [str(item) for item in input.column_order], [str(item) for item in input.hidden_columns], sort)
         return await mutate(operation, ViewResult, "view", view_type)
+
+    @strawberry.mutation
+    async def save_exercise(self, info: Info, input: SaveExerciseInput) -> ExerciseResult:
+        variants = [{"text": variant.text, "options": list(variant.options), "correct": variant.correct} for variant in input.variants]
+        operation = info.context["store"].save_exercise(str(input.id) if input.id else None, input.title, variants)
+        return await mutate(operation, ExerciseResult, "exercise", exercise_type)
+
+    @strawberry.mutation
+    async def delete_exercise(self, info: Info, id: strawberry.ID) -> ExerciseResult:
+        return await mutate(info.context["store"].delete_exercise(str(id)), ExerciseResult, "exercise", exercise_type)
 
     @strawberry.mutation(description="Rende la vista quella in uso per la sua tabella.")
     async def select_table_view(self, info: Info, view_id: strawberry.ID) -> ViewResult:

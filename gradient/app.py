@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 
+from anyio import to_thread
+
 import secrets
 from pathlib import Path
 
@@ -15,6 +17,7 @@ from gradient.config import Settings
 from gradient.database import Database
 from gradient.schema import schema
 from gradient.services import Store
+from gradient.typst_render import worker as typst_worker
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -29,6 +32,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             await database.close()
+            await to_thread.run_sync(typst_worker.close)
 
     application = FastAPI(title="Gradient", lifespan=lifespan)
 

@@ -1,6 +1,6 @@
 [project]
 name = "gradient"
-version = "0.1.0"
+version = "0.2.0"
 description = "Registro delle valutazioni universitarie"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -15,6 +15,7 @@ dependencies = [
     "pydantic-settings>=2.16.1",
     "sqlalchemy[asyncio]>=2.1.6",
     "strawberry-graphql[fastapi]>=0.336.2",
+    "typst>=0.15.2",
     "uvicorn>=0.54.0",
 ]
 

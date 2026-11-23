@@ -68,7 +68,7 @@ Tutte le richieste GraphQL richiedono una sessione autenticata. Ogni POST, logou
 
 Il contratto è dichiarato in `gradient/schema.py` ed esportato in [schema.graphql](schema.graphql) con `make schema`. Le operazioni frontend sono in `frontend/src/api.ts`; i test ne verificano la validità rispetto allo schema e controllano che il file esportato sia aggiornato.
 
-Le operazioni disponibili sono `me` (profilo autenticato), `courses`, `courseTables`, `studentRows`, `tableColumns`, `tableViews`, `createCourse`, `createTable`, `addStudent`, `addColumn`, `updateColumn`, `deleteColumn`, `setCell`, `saveTableView`, `selectTableView`, `deleteTableView`, `previewCsv` e `importCsvTable`. Le operazioni frontend possono comporre frammenti condivisi (`ROW`, `COLUMN`, `VIEW` in `api.ts`), espansi dal test del contratto.
+Le operazioni disponibili sono `me` (profilo autenticato), `courses`, `courseTables`, `studentRows`, `tableColumns`, `tableViews`, `createCourse`, `createTable`, `addStudent`, `addColumn`, `updateColumn`, `deleteColumn`, `setCell`, `saveTableView`, `selectTableView`, `deleteTableView`, `exercises`, `exercise`, `exercisePreview`, `saveExercise`, `deleteExercise`, `previewCsv` e `importCsvTable`. Le operazioni frontend possono comporre frammenti condivisi (`ROW`, `COLUMN`, `VIEW` in `api.ts`), espansi dal test del contratto.
 
 `setCell` riceve il testo digitato e lo interpreta sul server secondo il tipo della colonna (`gradient/cells.py`): voti con virgola o punto e modificatori `+`, `-`, `L` o «e lode», flag `sì/no` (anche `s/n`, `x`, `1/0`), testo. Il testo vuoto svuota la cella. Sulle colonne anagrafiche aggiorna i campi della riga; DSA e DIS restano a due stati. La risposta contiene la riga aggiornata con tutte le sue celle. Le mutazioni restituiscono errori di validazione con campo, codice e messaggio; l'importazione indica anche la riga del CSV. Gli ID inesistenti e le matricole duplicate vengono segnalati senza salvare righe parziali. Gli anni accademici accettano `2026/27` o `2026/2027` e vengono memorizzati nella forma completa. Matricole vuote diventano valori mancanti, mentre gli zeri iniziali vengono conservati.
 
@@ -84,6 +84,15 @@ Gli errori operativi riconosciuti sono intercettati e producono un solo messaggi
 - `0003`: email e flag DSA/DIS delle righe, inizialmente vuoti/off.
 - `0004`: utenti, sessioni e proprietario dei corsi; i corsi precedenti restano senza proprietario.
 - `0005`: definizioni delle colonne (`table_columns`), celle (`cells`) e viste personali (`table_views`). Aggiunge alle tabelle esistenti le sei colonne anagrafiche. Un vincolo CHECK impone che una cella presente abbia esattamente un valore; le celle vuote non sono memorizzate. Celle, colonne e viste sono eliminate in cascata con righe, tabelle e utenti. `last_used` usa i microsecondi per distinguere l'ultima vista usata.
+- `0006`: archivio degli esercizi (`exercises`, `exercise_variants`), eliminato in cascata con l'utente.
+
+## Compilazione Typst
+
+`gradient/typst_render.py` compila i testi con il pacchetto Python `typst` in un processo figlio dedicato (`spawn`), una compilazione alla volta, con tempo massimo di 20 secondi; oltre il limite, o in caso di crash, il processo viene terminato e ricreato, e viene comunque riavviato ogni 50 compilazioni. Il processo occupa circa 50-90 MB (misurati nel container, con cetz-plot): si chiude dopo 5 minuti di inattività e si ricrea alla compilazione successiva, che richiede circa un secondo. Nel processo figlio le variabili di proxy puntano a un indirizzo inesistente: Typst non può scaricare pacchetti nemmeno con import costruiti dinamicamente, mentre il resto del backend (OAuth) non è influenzato. Prima della compilazione gli import testuali sono confrontati con `ALLOWED_PACKAGES` per dare un messaggio chiaro.
+
+Ogni frammento (testo, risposte) è scritto in un file separato in una cartella temporanea che fa da radice del documento: Typst non legge file esterni e gli errori indicano il campo. Si usano soltanto i font inclusi in Typst. I pacchetti approvati sono in `gradient/typst_packages/` (vedere il README della cartella), copiati nell'immagine con il codice.
+
+L'anteprima restituisce SVG, che il frontend mostra come immagini (`data:` URL) senza inserirli nel DOM. Il serializzatore JSON del motore SQLAlchemy non codifica i caratteri non ASCII, così la ricerca trova anche parole accentate nelle risposte.
 
 ## Test
 
@@ -113,7 +122,7 @@ Le migrazioni automatiche si applicano soltanto quando il comando da avviare è 
 
 ### Pubblicazione su Docker Hub
 
-Il workflow [.github/workflows/docker.yml](.github/workflows/docker.yml) costruisce e pubblica l'immagine `linux/amd64` a ogni push sul branch `main`. Legge la versione da `project.version` in `pyproject.toml` (attualmente `0.1.0`) e pubblica la stessa build con i tag:
+Il workflow [.github/workflows/docker.yml](.github/workflows/docker.yml) costruisce e pubblica l'immagine `linux/amd64` a ogni push sul branch `main`. Legge la versione da `project.version` in `pyproject.toml` (attualmente `0.2.0`) e pubblica la stessa build con i tag:
 
 - `paolini/gradient:vX.Y.Z`;
 - `paolini/gradient:main`.

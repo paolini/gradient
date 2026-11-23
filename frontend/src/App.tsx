@@ -7,13 +7,17 @@ import CsvImport from './CsvImport';
 import Dialog from './Dialog';
 import { LoadError, NotFound, courseDetails, courseHref, message, tableDetails, tableHref, useList } from './common';
 import TablePage from './TablePage';
+import { ExerciseEditor, ExercisesPage } from './Exercises';
 
-type Route = { page: 'home' } | { page: 'course'; courseId: string } | { page: 'table'; courseId: string; tableId: string };
+type Route = { page: 'home' } | { page: 'course'; courseId: string } | { page: 'table'; courseId: string; tableId: string }
+  | { page: 'exercises' } | { page: 'exercise'; exerciseId: string | null };
 
 function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   if (parts[0] === 'corsi' && parts[1] && parts[2] === 'tabelle' && parts[3]) return { page: 'table', courseId: parts[1], tableId: parts[3] };
   if (parts[0] === 'corsi' && parts[1]) return { page: 'course', courseId: parts[1] };
+  if (parts[0] === 'esercizi' && parts[1]) return { page: 'exercise', exerciseId: parts[1] === 'nuovo' ? null : parts[1] };
+  if (parts[0] === 'esercizi') return { page: 'exercises' };
   return { page: 'home' };
 }
 
@@ -143,5 +147,7 @@ export default function App() {
     {route.page === 'home' && <HomePage />}
     {route.page === 'course' && <CoursePage key={route.courseId} courseId={route.courseId} />}
     {route.page === 'table' && <TablePage key={route.tableId} courseId={route.courseId} tableId={route.tableId} />}
+    {route.page === 'exercises' && <ExercisesPage />}
+    {route.page === 'exercise' && <ExerciseEditor key={route.exerciseId ?? 'nuovo'} exerciseId={route.exerciseId} />}
   </main>;
 }

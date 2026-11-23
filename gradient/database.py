@@ -1,3 +1,5 @@
+import json
+
 from asyncmy.constants import CR, ER
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -45,6 +47,8 @@ class Database:
     def __init__(self, settings: Settings):
         self.engine = create_async_engine(
             settings.database_url, pool_size=2, max_overflow=0, pool_pre_ping=True,
+            # JSON leggibile e ricercabile: le lettere accentate non diventano sequenze \uXXXX.
+            json_serializer=lambda value: json.dumps(value, ensure_ascii=False),
         )
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
 

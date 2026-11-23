@@ -16,9 +16,10 @@ Sono implementati:
 - creazione e lettura di corsi, tabelle e righe studente tramite GraphQL e interfaccia React;
 - importazione iniziale CSV con anteprima, associazione delle colonne e salvataggio atomico, con email e flag DSA/DIS;
 - colonne personalizzate di tipo flag, voto e testo, con modifica delle celle nella griglia da tastiera, comprese le colonne anagrafiche;
-- viste personali con nome: ordine e visibilità delle colonne, ordinamento delle righe.
+- viste personali con nome: ordine e visibilità delle colonne, ordinamento delle righe;
+- archivio personale degli esercizi a risposta multipla, con varianti, testi Typst, risposta corretta, ricerca e anteprima.
 
-Non sono ancora implementati condivisione dei corsi, collegamento account, pannello amministrativo, reimportazioni, codice compito, risposta multipla, formule, riepilogo del corso e collegamenti tra tabelle.
+Non sono ancora implementati condivisione dei corsi, collegamento account, pannello amministrativo, reimportazioni, preparazione e stampa dei compiti, codice compito, correzione della risposta multipla, formule, riepilogo del corso e collegamenti tra tabelle.
 
 ## Accesso
 
@@ -101,18 +102,54 @@ Sono implementati i tipi **flag**, **voto** e **testo**:
 
 Il valore numerico dei modificatori nei calcoli (incremento di `+` e `-`, bonus della lode) sarà configurato con le formule.
 
+### Compiti a risposta multipla
+
+Decisioni concordate, non ancora implementate:
+
+- Gradient gestisce anche la preparazione dei compiti a risposta multipla, compresi testi e stampa;
+- i testi di esercizi e risposte si scrivono in [Typst](https://typst.app/), che produce anche la versione stampabile;
+- ogni codice compito determina la permutazione degli esercizi, la permutazione delle risposte di ciascun esercizio e la variante scelta per ciascun esercizio;
+- deve essere possibile importare compiti e chiavi di correzione da altri sistemi. Il formato dei dati di importazione ed esportazione è definito da Gradient.
+- si possono generare sia compiti personali, uno per studente della tabella con nome e matricola, sia un numero scelto di compiti anonimi; la modalità si sceglie per ciascuna prova;
+- le risposte degli studenti si possono importare dalla lettura ottica di fogli risposte stampati da Gradient e anche inserire o correggere a mano nella griglia;
+- lo schema di punteggio (risposta giusta, sbagliata, vuota) è unico per tutti gli esercizi del compito;
+- gli esercizi, con le loro varianti, stanno in un archivio riutilizzabile; il compito ne conserva una copia fissa, così le modifiche all'archivio non alterano compiti già generati.
+- ogni variante di esercizio ha esattamente una risposta corretta; lo studente ne indica una sola oppure nessuna.
+- compiti e tabelle sono indipendenti: il compito appartiene al corso e può essere preparato prima che esista la tabella della prova. Una tabella si collega a un compito tramite le colonne risposte e codice compito, e può collegarsi a più compiti, per esempio parti corrette separatamente. I compiti personali si generano per gli studenti di una tabella scelta al momento della generazione, legando il codice alla matricola.
+
+Proposta approvata nelle linee generali, con dettagli da definire durante l'implementazione:
+
+- l'esercizio dell'archivio ha una o più varianti, ciascuna con testo Typst, opzioni di risposta e indice della risposta corretta;
+- il compito contiene la copia degli esercizi scelti, l'intestazione, lo schema di punteggio e le opzioni di generazione;
+- ogni codice compito memorizza esplicitamente, per ogni posizione del foglio, esercizio, variante e permutazione delle risposte, anziché un seme casuale; può essere associato a uno studente o anonimo. La chiave di correzione si ricava da questi dati;
+- nella tabella della prova: colonna codice compito, colonna risposte (stringa per studente, per esempio `BD-AC`, con `-` per la risposta vuota) e colonna automatica del punteggio, calcolata dal server;
+- formato JSON versionato `gradient-compito` con esercizi, varianti e codici, in cui i testi sono facoltativi per importare soltanto struttura e chiavi; formato CSV `codice;matricola;risposte` per le risposte lette otticamente;
+- stampa tramite un documento Typst compilato dal backend in PDF: compiti e fogli risposte leggibili otticamente. La lettura ottica resta esterna;
+- anche gli esercizi sono indipendenti dal compito: stanno nell'archivio e il compito ne copia quelli scelti.
+- l'archivio degli esercizi appartiene all'utente ed è usabile in tutti i suoi corsi; la condivisione con altri utenti resta da progettare. Per ora un esercizio ha un titolo e si ritrova con una ricerca testuale, senza etichette o cartelle;
+- i testi Typst sono compilati dal backend con il pacchetto Python `typst`, in SVG per l'anteprima e in PDF per la stampa.
+- i testi possono importare soltanto pacchetti Typst di un elenco approvato, inclusi nel repository e nell'immagine: il server non scarica pacchetti durante l'uso e rifiuta gli import non ammessi. La compilazione usa soltanto i font inclusi in Typst, così il risultato è lo stesso in sviluppo e in produzione.
+
+È implementato l'archivio degli esercizi (sezione «Esercizi»):
+
+- ogni esercizio ha un titolo e da 1 a 20 varianti; ogni variante ha un testo e da 2 a 10 risposte, in Typst, e una risposta corretta. Testo e risposte non possono essere vuoti;
+- l'anteprima di ogni variante si aggiorna durante la scrittura e indica la risposta corretta; gli errori Typst indicano il campo (testo o risposta) e la riga;
+- l'esercizio si salva anche se l'anteprima contiene errori Typst;
+- la ricerca considera titolo, testi e risposte; più parole devono comparire tutte;
+- salvare un esercizio sostituisce tutte le sue varianti; eliminarlo non modificherà i compiti già preparati, che ne conserveranno una copia.
+
+Ordine di lavoro concordato: archivio degli esercizi con testi (implementato); preparazione del compito e generazione dei codici; stampa; correzione con colonne codice, risposte e punteggio; importazione ed esportazione.
+
+### Altre proposte sulle colonne
+
 Proposta in discussione, non ancora approvata né implementata:
 
-- **codice compito**, che identifica la variante;
-- **blocco a risposta multipla**: una cella per studente con la stringa delle risposte (per esempio `ABDC-E`, con `-` per la risposta vuota), visualizzabile per domanda, e una chiave delle risposte corrette per ciascun codice compito;
-- **calcolata**, con una formula che fa riferimento alle colonne per nome e viene valutata dal server.
+- colonna **calcolata**, con una formula che fa riferimento alle colonne per nome e viene valutata dal server.
 
 La proposta prevede inoltre l'aggiunta di più colonne di esercizi in un'unica operazione e la copia della struttura delle colonne da un'altra tabella.
 
 Questioni aperte:
 
-- se le varianti a risposta multipla hanno chiavi indipendenti o sono permutazioni di un compito base;
-- se i punteggi della risposta multipla (giusta, sbagliata, vuota) sono uniformi o pesati per domanda;
 - sintassi delle formule e valutazione esclusivamente lato server;
 - se le viste potranno essere condivise tra utenti, quando sarà introdotta la condivisione dei corsi, e se dovranno anche filtrare le righe;
 - se la lode debba essere ammessa soltanto sul massimo della scala.

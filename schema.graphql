@@ -126,6 +126,48 @@ type CsvStudent {
 """Date (isoformat)"""
 scalar Date
 
+"""Date with time (isoformat)"""
+scalar DateTime
+
+type Exercise {
+  id: ID!
+  title: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  variants: [ExerciseVariant!]!
+}
+
+type ExerciseResult {
+  exercise: Exercise
+  errors: [FieldError!]!
+}
+
+type ExerciseSummary {
+  id: ID!
+  title: String!
+  updatedAt: DateTime!
+  variantCount: Int!
+}
+
+type ExerciseVariant {
+  id: ID!
+
+  """Testo della domanda in Typst."""
+  text: String!
+
+  """Risposte in Typst, nell'ordine base (A, B, C…)."""
+  options: [String!]!
+
+  """Indice della risposta corretta, da 0."""
+  correct: Int!
+}
+
+input ExerciseVariantInput {
+  text: String!
+  options: [String!]!
+  correct: Int!
+}
+
 type FieldError {
   field: String!
   code: String!
@@ -168,6 +210,8 @@ type Mutation {
   """
   setCell(input: SetCellInput!): StudentResult!
   saveTableView(input: SaveViewInput!): ViewResult!
+  saveExercise(input: SaveExerciseInput!): ExerciseResult!
+  deleteExercise(id: ID!): ExerciseResult!
 
   """Rende la vista quella in uso per la sua tabella."""
   selectTableView(viewId: ID!): ViewResult!
@@ -187,6 +231,15 @@ type Query {
   tableColumns(tableId: ID!): [TableColumn!]!
 
   """
+  Esercizi dell'archivio personale, dal più recente; la ricerca considera titolo, testi e risposte.
+  """
+  exercises(search: String = null): [ExerciseSummary!]!
+  exercise(id: ID!): Exercise!
+
+  """Compila in SVG una variante non ancora salvata, per l'anteprima."""
+  exercisePreview(variant: ExerciseVariantInput!): TypstPreview!
+
+  """
   Viste personali dell'utente: ordine e visibilità delle colonne, ordinamento delle righe.
   """
   tableViews(tableId: ID!): [TableView!]!
@@ -200,6 +253,13 @@ type RowSort {
 input RowSortInput {
   columnId: ID!
   descending: Boolean! = false
+}
+
+input SaveExerciseInput {
+  """Assente per creare un nuovo esercizio."""
+  id: ID = null
+  title: String!
+  variants: [ExerciseVariantInput!]!
 }
 
 input SaveViewInput {
@@ -259,6 +319,20 @@ type TableView {
   columnOrder: [ID!]!
   hiddenColumns: [ID!]!
   rowSort: [RowSort!]!
+}
+
+type TypstIssue {
+  """text oppure options.N"""
+  field: String!
+  message: String!
+  line: Int
+  column: Int
+}
+
+type TypstPreview {
+  """Pagine SVG; da mostrare come immagini, non da inserire nel DOM."""
+  pages: [String!]!
+  errors: [TypstIssue!]!
 }
 
 input UpdateColumnInput {

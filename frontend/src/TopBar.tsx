@@ -27,10 +27,21 @@ export default function TopBar({ user, pending, onLogout }: { user: User; pendin
     return () => { document.removeEventListener('pointerdown', onPointer); document.removeEventListener('keydown', onKey); };
   }, [open]);
 
+  const [hash, setHash] = useState(window.location.hash);
+  useEffect(() => {
+    const update = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', update);
+    return () => window.removeEventListener('hashchange', update);
+  }, []);
+  const section = hash.startsWith('#/esercizi') ? 'exercises' : 'courses';
   const provider = user.provider === 'google' ? 'Google' : 'UniPi';
   return <header className="topbar">
     <div className="topbar-inner">
-      <span className="topbar-brand">Gradient</span>
+      <nav className="topbar-nav" aria-label="Sezioni">
+        <a className="topbar-brand" href="#/">Gradient</a>
+        <a href="#/" aria-current={section === 'courses' ? 'page' : undefined}>Corsi</a>
+        <a href="#/esercizi" aria-current={section === 'exercises' ? 'page' : undefined}>Esercizi</a>
+      </nav>
       <div className="user-menu" ref={containerRef}>
         <button ref={buttonRef} type="button" className="user-button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)}>
           <span className="avatar" aria-hidden="true">{initials(user.name)}</span>

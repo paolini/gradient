@@ -2,7 +2,7 @@ from datetime import date as DateValue, datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, MetaData, Numeric, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, MetaData, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.mysql import DATETIME
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -121,3 +121,26 @@ class TableView(Base):
     row_sort: Mapped[list] = mapped_column(JSON)
     # Si riapre la vista usata più di recente.
     last_used: Mapped[datetime] = mapped_column(DateTime().with_variant(DATETIME(fsp=6), "mysql", "mariadb"))
+
+
+class Exercise(Base):
+    """Esercizio dell'archivio personale, riutilizzabile in tutti i corsi dell'utente."""
+    __tablename__ = "exercises"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class ExerciseVariant(Base):
+    """Variante di un esercizio: testo e opzioni in Typst, una sola risposta corretta."""
+    __tablename__ = "exercise_variants"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    exercise_id: Mapped[str] = mapped_column(ForeignKey("exercises.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    options: Mapped[list] = mapped_column(JSON)
+    correct: Mapped[int] = mapped_column(Integer)
