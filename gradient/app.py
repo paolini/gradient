@@ -54,9 +54,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.add_exception_handler(SQLAlchemyError, database_error_handler)
 
     async def context(request: Request, user=Depends(require_user)):
-        if request.method == "POST":
+        api_token = getattr(request.state, "api_token", None)
+        if request.method == "POST" and api_token is None:
             check_origin(request)
-        return {"store": Store(request.app.state.store.database, user.id), "user": user}
+        return {"store": Store(request.app.state.store.database, user.id), "user": user, "api_token": api_token}
 
     @application.get("/healthz", include_in_schema=False)
     async def health():

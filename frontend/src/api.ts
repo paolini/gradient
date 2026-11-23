@@ -15,6 +15,7 @@ export type TableView = { id: string | null; name: string; active: boolean; colu
 export type CsvMapping = { matricola: number | null; lastName: number | null; firstName: number | null; email: number | null; dsa: number | null; dis: number | null };
 export type CsvIssue = { row: number | null; field: string; message: string };
 export type CsvPreview = { headers: string[]; mapping: CsvMapping; totalRows: number; rows: Omit<StudentRow, 'id' | 'tableId'>[]; errors: CsvIssue[]; warnings: CsvIssue[]; delimiter: string; headerRow: number };
+export type ApiToken = { id: string; name: string; readOnly: boolean; createdAt: string; expiresAt: string | null; lastUsedAt: string | null };
 type FieldError = { field: string; code: string; message: string };
 export type MutationResult<T> = T & { errors: FieldError[] };
 
@@ -43,6 +44,7 @@ export async function graphql<T>(query: string, variables: Record<string, unknow
 const ROW = 'id tableId matricola firstName lastName email dsa dis cells { columnId display flag gradeBase gradeModifier text }';
 const COLUMN = 'id tableId kind name grade { maximum allowAboveMaximum allowNegative passThreshold modifiers }';
 const VIEW = 'id name active columnOrder hiddenColumns rowSort { columnId descending }';
+const API_TOKEN = 'id name readOnly createdAt expiresAt lastUsedAt';
 const EXERCISE = 'id title createdAt updatedAt variants { text options correct }';
 
 export const operations = {
@@ -65,6 +67,9 @@ export const operations = {
   saveExercise: `mutation SaveExercise($input: SaveExerciseInput!) { saveExercise(input: $input) { exercise { ${EXERCISE} } errors { field code message } } }`,
   deleteExercise: 'mutation DeleteExercise($id: ID!) { deleteExercise(id: $id) { errors { field code message } } }',
   previewCsv: 'mutation PreviewCsv($input: PreviewCsvInput!) { previewCsv(input: $input) { headers mapping { matricola lastName firstName email dsa dis } totalRows rows { matricola firstName lastName email dsa dis } errors { row field message } warnings { row field message } delimiter headerRow } }',
+  apiTokens: `query ApiTokens { apiTokens { ${API_TOKEN} } }`,
+  createApiToken: `mutation CreateApiToken($input: CreateApiTokenInput!) { createApiToken(input: $input) { token { ${API_TOKEN} } secret errors { field code message } } }`,
+  revokeApiToken: 'mutation RevokeApiToken($id: ID!) { revokeApiToken(id: $id) { errors { field code message } } }',
   importCsv: 'mutation ImportCsv($input: ImportCsvInput!) { importCsvTable(input: $input) { table { id courseId name date location } importedCount errors { row field message } warnings { row field message } } }',
 };
 

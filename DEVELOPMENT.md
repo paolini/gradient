@@ -62,7 +62,20 @@ Il cookie applicativo è HttpOnly e SameSite=Lax, Secure su HTTPS; nel database 
 
 Solo i provider completamente configurati vengono mostrati nella pagina di accesso. Non è previsto un accesso anonimo di sviluppo. I test con provider simulati non sostituiscono la verifica reale, in particolare per le impostazioni del client UniPi.
 
-Tutte le richieste GraphQL richiedono una sessione autenticata. Ogni POST, logout compreso, richiede l'intestazione `X-Gradient-Request: 1` e, se presente, un'`Origin` corrispondente ad `AUTH_BASE_URL`. L'editor GraphiQL su `/graphql` invia automaticamente questa intestazione e va aperto tramite l'origine frontend dopo il login. In sviluppo Vite inoltra `/graphql` e `/auth` al backend locale, senza configurazioni CORS.
+Tutte le richieste GraphQL richiedono una sessione autenticata o un token API. Ogni POST, logout compreso, richiede l'intestazione `X-Gradient-Request: 1` e, se presente, un'`Origin` corrispondente ad `AUTH_BASE_URL`. L'editor GraphiQL su `/graphql` invia automaticamente questa intestazione e va aperto tramite l'origine frontend dopo il login. In sviluppo Vite inoltra `/graphql` e `/auth` al backend locale, senza configurazioni CORS.
+
+### Token API
+
+Le richieste con `Authorization: Bearer gradient_…` sono autenticate dal token, che sostituisce il cookie: un token non valido, scaduto o revocato produce 401 anche in presenza di una sessione valida. Non richiedono `X-Gradient-Request` né il controllo dell'`Origin`, perché il browser non allega da solo l'intestazione Authorization e quindi non c'è rischio CSRF.
+
+```bash
+curl https://gradient.example.org/graphql \
+  -H "Authorization: Bearer $GRADIENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "{ courses { id name academicYear } }"}'
+```
+
+Il segreto (`gradient_` seguito da 32 byte casuali) è restituito soltanto da `createApiToken`; il database conserva lo SHA-256, come per le sessioni. Per i token in sola lettura l'estensione Strawberry `ReadOnlyTokens` rifiuta qualsiasi mutation prima dell'esecuzione, con codice `READ_ONLY_TOKEN`, anche se la mutation non modifica dati (per esempio `previewCsv`). `apiTokens`, `createApiToken` e `revokeApiToken` rispondono `SESSION_REQUIRED` se chiamate con un token. `last_used_at` viene aggiornato al più una volta l'ora per evitare una scrittura a ogni richiesta. I token scaduti restano nell'elenco finché non vengono revocati.
 
 ## Contratto GraphQL
 
@@ -85,6 +98,7 @@ Gli errori operativi riconosciuti sono intercettati e producono un solo messaggi
 - `0004`: utenti, sessioni e proprietario dei corsi; i corsi precedenti restano senza proprietario.
 - `0005`: definizioni delle colonne (`table_columns`), celle (`cells`) e viste personali (`table_views`). Aggiunge alle tabelle esistenti le sei colonne anagrafiche. Un vincolo CHECK impone che una cella presente abbia esattamente un valore; le celle vuote non sono memorizzate. Celle, colonne e viste sono eliminate in cascata con righe, tabelle e utenti. `last_used` usa i microsecondi per distinguere l'ultima vista usata.
 - `0006`: archivio degli esercizi (`exercises`, `exercise_variants`), eliminato in cascata con l'utente.
+- `0007`: token API personali (`api_tokens`), con hash univoco, eliminati in cascata con l'utente.
 
 ## Compilazione Typst
 
@@ -102,7 +116,7 @@ make test     # contratto, configurazione e validazione, senza database
 make test-db  # integrazione sulla MariaDB configurata, dopo make migrate
 ```
 
-I test di integrazione creano corsi temporanei e rimuovono soltanto i propri dati al termine. Verificano persistenza tra istanze dell'applicazione, unicità delle matricole per tabella, più matricole mancanti, indipendenza dei nomi tra tabelle, rollback dell'importazione, sessioni reali, separazione degli account con la stessa email, isolamento dei corsi, logout e scadenza. Non creano né avviano database: utilizzare un database di sviluppo.
+I test di integrazione creano corsi temporanei e rimuovono soltanto i propri dati al termine. Verificano persistenza tra istanze dell'applicazione, unicità delle matricole per tabella, più matricole mancanti, indipendenza dei nomi tra tabelle, rollback dell'importazione, sessioni reali, separazione degli account con la stessa email, isolamento dei corsi, logout e scadenza, token API completi e in sola lettura, revoca e scadenza dei token. Non creano né avviano database: utilizzare un database di sviluppo.
 
 ## Immagine Docker
 

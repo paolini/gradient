@@ -76,6 +76,20 @@ class LoginSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
 
 
+class ApiToken(Base):
+    """Token personale per l'accesso programmatico a GraphQL; si conserva solo l'hash."""
+    __tablename__ = "api_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    read_only: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class TableColumn(Base):
     """Definizione di una colonna, comune a tutti gli utenti della tabella."""
     __tablename__ = "table_columns"

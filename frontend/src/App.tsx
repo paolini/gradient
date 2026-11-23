@@ -8,9 +8,10 @@ import Dialog from './Dialog';
 import { LoadError, NotFound, courseDetails, courseHref, message, tableDetails, tableHref, useList } from './common';
 import TablePage from './TablePage';
 import { ExerciseEditor, ExercisesPage } from './Exercises';
+import ApiTokensPage from './ApiTokens';
 
 type Route = { page: 'home' } | { page: 'course'; courseId: string } | { page: 'table'; courseId: string; tableId: string }
-  | { page: 'exercises' } | { page: 'exercise'; exerciseId: string | null };
+  | { page: 'exercises' } | { page: 'exercise'; exerciseId: string | null } | { page: 'tokens' };
 
 function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
@@ -18,6 +19,7 @@ function parseRoute(hash: string): Route {
   if (parts[0] === 'corsi' && parts[1]) return { page: 'course', courseId: parts[1] };
   if (parts[0] === 'esercizi' && parts[1]) return { page: 'exercise', exerciseId: parts[1] === 'nuovo' ? null : parts[1] };
   if (parts[0] === 'esercizi') return { page: 'exercises' };
+  if (parts[0] === 'token') return { page: 'tokens' };
   return { page: 'home' };
 }
 
@@ -148,6 +150,7 @@ export default function App() {
     {route.page === 'course' && <CoursePage key={route.courseId} courseId={route.courseId} />}
     {route.page === 'table' && <TablePage key={route.tableId} courseId={route.courseId} tableId={route.tableId} />}
     {route.page === 'exercises' && <ExercisesPage />}
+    {route.page === 'tokens' && <ApiTokensPage />}
     {route.page === 'exercise' && <ExerciseEditor key={route.exerciseId ?? 'nuovo'} exerciseId={route.exerciseId} />}
   </main>;
 }

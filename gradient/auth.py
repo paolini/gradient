@@ -1,5 +1,4 @@
-"""Login OAuth con profilo letto dal provider e sessioni revocabili locali."""
-import hashlib
+"""Login OAuth con profilo letto dal provider, sessioni revocabili locali e token API personali."""
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -10,24 +9,23 @@ from authlib.integrations.base_client.errors import OAuthError
 from authlib.oauth2 import OAuth2Error
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from gradient.database import database_error_details
-from gradient.models import LoginSession, User
+from gradient.services import API_TOKEN_PREFIX as TOKEN_PREFIX, digest
+from gradient.models import ApiToken, LoginSession, User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth")
 COOKIE = "gradient_session"
 LIFETIME = 60 * 60 * 24 * 7
+# Aggiornare l'ultimo utilizzo al più una volta l'ora evita una scrittura a ogni richiesta.
+LAST_USED_RESOLUTION = timedelta(hours=1)
 
 
 def now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
-def digest(token):
-    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def providers(settings):
@@ -75,7 +73,42 @@ async def current_user(request: Request):
             LoginSession.token_hash == digest(token), LoginSession.expires_at > now()))
 
 
+def invalid_token():
+    return HTTPException(401, "Token API non valido, scaduto o revocato.", headers={"WWW-Authenticate": "Bearer"})
+
+
+def bearer_token(request: Request) -> str | None:
+    header = request.headers.get("authorization")
+    if header is None:
+        return None
+    scheme, _, token = header.partition(" ")
+    token = token.strip()
+    if scheme.lower() != "bearer" or not token.startswith(TOKEN_PREFIX) or len(token) > 128:
+        raise invalid_token()
+    return token
+
+
+async def token_user(request: Request, token: str):
+    async with request.app.state.store.database.sessions.begin() as session:
+        pair = (await session.execute(select(User, ApiToken).join(ApiToken, ApiToken.user_id == User.id).where(
+            ApiToken.token_hash == digest(token), or_(ApiToken.expires_at.is_(None), ApiToken.expires_at > now())))).first()
+        if pair is None:
+            return None
+        user, api_token = pair
+        if api_token.last_used_at is None or api_token.last_used_at < now() - LAST_USED_RESOLUTION:
+            api_token.last_used_at = now()
+    return user, api_token
+
+
 async def require_user(request: Request):
+    # Un'intestazione Authorization esclude il cookie: niente ricadute silenziose sulla sessione.
+    token = bearer_token(request)
+    if token is not None:
+        result = await token_user(request, token)
+        if result is None:
+            raise invalid_token()
+        user, request.state.api_token = result
+        return user
     user = await current_user(request)
     if user is None:
         raise HTTPException(401, "Accedi per utilizzare Gradient.")
@@ -84,6 +117,7 @@ async def require_user(request: Request):
 
 def check_origin(request: Request):
     # JSON + intestazione personalizzata impediscono l'invio tramite form cross-site.
+    # Non serve con i token API: il browser non allega da solo l'intestazione Authorization.
     if request.headers.get("x-gradient-request") != "1":
         raise HTTPException(403, "Richiesta non valida.")
     origin = request.headers.get("origin")

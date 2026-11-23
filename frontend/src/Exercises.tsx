@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { graphql, operations, requireSuccess } from './api';
 import type { Exercise, ExerciseSummary, ExerciseVariant, MutationResult, TypstIssue, TypstPreview } from './api';
-import { LoadError, NotFound, message } from './common';
+import { LoadError, NotFound, formatDateTime, message } from './common';
 
 const LETTERS = 'ABCDEFGHIJ';
 const MAX_OPTIONS = 10;
@@ -10,11 +10,6 @@ const MAX_OPTIONS = 10;
 let justCreated: string | null = null;
 
 export const exerciseHref = (id: string) => `#/esercizi/${encodeURIComponent(id)}`;
-
-function formatDateTime(value: string) {
-  // Il server memorizza l'ora UTC senza fuso.
-  return new Date(value.endsWith('Z') ? value : `${value}Z`).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
-}
 
 export function ExercisesPage() {
   const [search, setSearch] = useState('');

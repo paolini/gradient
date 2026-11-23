@@ -26,6 +26,11 @@ export function formatDate(value: string) {
   return `${day}/${month}/${year}`;
 }
 
+export function formatDateTime(value: string) {
+  // Il server memorizza l'ora UTC senza fuso.
+  return new Date(value.endsWith('Z') ? value : `${value}Z`).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
+}
+
 export const courseDetails = (course: Course) => [course.degreeProgram, course.academicYear].filter(Boolean).join(' · ');
 export const tableDetails = (table: CourseTable) => [table.date && formatDate(table.date), table.location].filter(Boolean).join(' · ');
 export const message = (failure: unknown, fallback: string) => failure instanceof Error ? failure.message : fallback;

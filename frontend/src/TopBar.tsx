@@ -11,7 +11,7 @@ export default function TopBar({ user, pending, onLogout }: { user: User; pendin
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const firstItemRef = useRef<HTMLButtonElement>(null);
+  const firstItemRef = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -33,7 +33,7 @@ export default function TopBar({ user, pending, onLogout }: { user: User; pendin
     window.addEventListener('hashchange', update);
     return () => window.removeEventListener('hashchange', update);
   }, []);
-  const section = hash.startsWith('#/esercizi') ? 'exercises' : 'courses';
+  const section = hash.startsWith('#/esercizi') ? 'exercises' : hash.startsWith('#/token') ? 'tokens' : 'courses';
   const provider = user.provider === 'google' ? 'Google' : 'UniPi';
   return <header className="topbar">
     <div className="topbar-inner">
@@ -50,7 +50,8 @@ export default function TopBar({ user, pending, onLogout }: { user: User; pendin
         </button>
         {open && <div className="user-dropdown" role="menu" aria-label="Account">
           <div className="user-info"><strong>{user.name}</strong><span>{user.email}</span><span>Accesso con {provider}</span></div>
-          <button ref={firstItemRef} type="button" role="menuitem" disabled={pending} onClick={() => { setOpen(false); onLogout(); }}>Esci</button>
+          <a ref={firstItemRef} role="menuitem" href="#/token" onClick={() => setOpen(false)}>Token API</a>
+          <button type="button" role="menuitem" disabled={pending} onClick={() => { setOpen(false); onLogout(); }}>Esci</button>
         </div>}
       </div>
     </div>

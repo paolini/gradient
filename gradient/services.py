@@ -1,9 +1,11 @@
+import hashlib
 import re
+import secrets
 from datetime import date as DateValue
 from uuid import UUID
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -14,7 +16,7 @@ from gradient.cells import (
     grade_violation, parse_decimal, parse_flag, parse_grade, parse_text,
 )
 from gradient.database import Database
-from gradient.models import Cell, Course, CourseTable, Exercise, ExerciseVariant, StudentRow, TableColumn, TableView, new_id
+from gradient.models import ApiToken, Cell, Course, CourseTable, Exercise, ExerciseVariant, StudentRow, TableColumn, TableView, new_id
 from gradient.csv_import import Preview
 
 DEFAULT_SORT = [{"column": "last_name", "descending": False}, {"column": "first_name", "descending": False}]
@@ -25,6 +27,8 @@ MAX_VARIANTS = 20
 MIN_OPTIONS, MAX_OPTIONS = 2, 10
 MAX_TYPST_TEXT = 20000
 MAX_TYPST_OPTION = 5000
+MAX_TOKEN_DAYS = 3650
+API_TOKEN_PREFIX = "gradient_"
 
 
 @dataclass
@@ -47,6 +51,11 @@ def builtin_columns(table_id: str) -> list[TableColumn]:
 def now() -> datetime:
     # Le colonne DateTime sono senza fuso orario: si memorizza l'ora UTC.
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def digest(token: str) -> str:
+    """Hash dei segreti (sessioni e token API): nel database non si salvano in chiaro."""
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def duplicate_key(error: IntegrityError) -> bool:
@@ -417,7 +426,7 @@ class Store:
 
     def require_user(self):
         if not self.user_id:
-            raise InputError("user", "L'archivio degli esercizi richiede un utente autenticato.", "NOT_FOUND")
+            raise InputError("user", "L'operazione richiede un utente autenticato.", "NOT_FOUND")
 
     async def require_exercise(self, session, exercise_id: str) -> Exercise:
         self.require_user()
@@ -495,6 +504,37 @@ class Store:
             saved = [ExerciseVariant(id=new_id(), exercise_id=exercise.id, position=index, **variant) for index, variant in enumerate(cleaned)]
             session.add_all(saved)
         return exercise, saved
+
+    # Token API personali
+
+    async def api_tokens(self):
+        self.require_user()
+        async with self.database.sessions() as session:
+            return list(await session.scalars(select(ApiToken).where(ApiToken.user_id == self.user_id).order_by(ApiToken.created_at.desc(), ApiToken.id)))
+
+    async def create_api_token(self, name: str, read_only: bool, expires_in_days: int | None):
+        """Restituisce il token e il segreto in chiaro, mostrato una sola volta e mai salvato."""
+        self.require_user()
+        name = text(name, "name", 100)
+        if expires_in_days is not None and not 1 <= expires_in_days <= MAX_TOKEN_DAYS:
+            raise InputError("expiresInDays", f"La durata deve essere fra 1 e {MAX_TOKEN_DAYS} giorni.")
+        secret = API_TOKEN_PREFIX + secrets.token_urlsafe(32)
+        created = now()
+        token = ApiToken(id=new_id(), user_id=self.user_id, name=name, read_only=read_only, created_at=created,
+                         token_hash=digest(secret),
+                         expires_at=created + timedelta(days=expires_in_days) if expires_in_days else None)
+        async with self.database.sessions.begin() as session:
+            session.add(token)
+        return token, secret
+
+    async def revoke_api_token(self, token_id: str):
+        self.require_user()
+        async with self.database.sessions.begin() as session:
+            token = await session.get(ApiToken, identifier(token_id, "id"))
+            if token is None or token.user_id != self.user_id:
+                raise InputError("id", "Token non trovato.", "NOT_FOUND")
+            await session.delete(token)
+        return token
 
     async def delete_exercise(self, exercise_id: str):
         async with self.database.sessions.begin() as session:

@@ -7,7 +7,9 @@ import strawberry
 from anyio import to_thread
 from graphql import GraphQLError
 from sqlalchemy.exc import SQLAlchemyError
+from strawberry.extensions import SchemaExtension
 from strawberry.types import ExecutionContext, Info
+from strawberry.types.graphql import OperationType
 
 from gradient.cells import GradeScale as GradeScaleData, format_decimal, format_flag, format_grade
 from gradient.database import database_error_details
@@ -18,8 +20,23 @@ from gradient.typst_render import TypstRenderError, render_variant
 logger = logging.getLogger(__name__)
 
 
-class HandledDatabaseError(GraphQLError):
+class HandledError(GraphQLError):
+    """Errore previsto e già gestito: non si registra con traceback."""
+
+
+class HandledDatabaseError(HandledError):
     """Errore operativo già diagnosticato e registrato dal backend."""
+
+
+class ReadOnlyTokens(SchemaExtension):
+    """Un token API in sola lettura non può eseguire mutation, nemmeno senza effetti sui dati."""
+
+    def on_execute(self):
+        context = self.execution_context.context
+        api_token = context.get("api_token") if isinstance(context, dict) else None
+        if api_token is not None and api_token.read_only and self.execution_context.operation_type == OperationType.MUTATION:
+            raise HandledError("Il token API è in sola lettura.", extensions={"code": "READ_ONLY_TOKEN"})
+        yield
 
 
 class GradientSchema(strawberry.Schema):
@@ -30,8 +47,8 @@ class GradientSchema(strawberry.Schema):
     ) -> None:
         unexpected = [
             error for error in errors
-            if not isinstance(error, HandledDatabaseError)
-            and not isinstance(error.original_error, HandledDatabaseError)
+            if not isinstance(error, HandledError)
+            and not isinstance(error.original_error, HandledError)
         ]
         if unexpected:
             super().process_errors(unexpected, execution_context)
@@ -486,6 +503,47 @@ class User:
 
 
 @strawberry.type
+class ApiToken:
+    id: strawberry.ID
+    name: str
+    read_only: bool
+    created_at: datetime
+    expires_at: datetime | None = strawberry.field(description="Assente se il token non scade.")
+    last_used_at: datetime | None = strawberry.field(description="Approssimato all'ora.")
+
+
+@strawberry.input
+class CreateApiTokenInput:
+    name: str
+    read_only: bool = False
+    expires_in_days: int | None = strawberry.field(default=None, description="Assente per un token senza scadenza.")
+
+
+@strawberry.type
+class ApiTokenResult:
+    token: ApiToken | None = None
+    errors: list[FieldError] = strawberry.field(default_factory=list)
+
+
+@strawberry.type
+class CreatedApiToken:
+    token: ApiToken | None = None
+    secret: str | None = strawberry.field(default=None, description="Valore da usare come Bearer; restituito soltanto alla creazione.")
+    errors: list[FieldError] = strawberry.field(default_factory=list)
+
+
+def api_token_type(row):
+    return ApiToken(id=strawberry.ID(row.id), name=row.name, read_only=row.read_only, created_at=row.created_at,
+                    expires_at=row.expires_at, last_used_at=row.last_used_at)
+
+
+def require_browser_session(info: Info):
+    # Un token non può crearne altri: la gestione richiede il login interattivo.
+    if info.context.get("api_token") is not None:
+        raise HandledError("I token API si gestiscono soltanto dall'interfaccia web.", extensions={"code": "SESSION_REQUIRED"})
+
+
+@strawberry.type
 class Query:
     @strawberry.field
     def me(self, info: Info) -> User:
@@ -524,6 +582,12 @@ class Query:
     @strawberry.field(description="Viste personali dell'utente: ordine e visibilità delle colonne, ordinamento delle righe.")
     async def table_views(self, info: Info, table_id: strawberry.ID) -> list[TableView]:
         return [view_type(view) for view in await execute(info.context["store"].views(str(table_id)))]
+
+
+    @strawberry.field(description="Token API personali; disponibile soltanto con il login dal browser.")
+    async def api_tokens(self, info: Info) -> list[ApiToken]:
+        require_browser_session(info)
+        return [api_token_type(row) for row in await execute(info.context["store"].api_tokens())]
 
 
 @strawberry.type
@@ -605,8 +669,23 @@ class Mutation:
     async def delete_table_view(self, info: Info, view_id: strawberry.ID) -> ViewsResult:
         return await mutate(info.context["store"].delete_view(str(view_id)), ViewsResult, "views", lambda views: [view_type(view) for view in views])
 
+    @strawberry.mutation(description="Crea un token API; il segreto è restituito una sola volta.")
+    async def create_api_token(self, info: Info, input: CreateApiTokenInput) -> CreatedApiToken:
+        require_browser_session(info)
+        result = await mutate(info.context["store"].create_api_token(input.name, input.read_only, input.expires_in_days),
+                              CreatedApiToken, "token", lambda pair: pair)
+        if result.token is None:
+            return result
+        row, secret = result.token
+        return CreatedApiToken(token=api_token_type(row), secret=secret)
 
-schema = GradientSchema(query=Query, mutation=Mutation)
+    @strawberry.mutation
+    async def revoke_api_token(self, info: Info, id: strawberry.ID) -> ApiTokenResult:
+        require_browser_session(info)
+        return await mutate(info.context["store"].revoke_api_token(str(id)), ApiTokenResult, "token", api_token_type)
+
+
+schema = GradientSchema(query=Query, mutation=Mutation, extensions=[ReadOnlyTokens])
 
 if __name__ == "__main__":
     Path("schema.graphql").write_text(schema.as_str() + "\n", encoding="utf-8")

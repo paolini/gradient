@@ -17,7 +17,8 @@ Sono implementati:
 - importazione iniziale CSV con anteprima, associazione delle colonne e salvataggio atomico, con email e flag DSA/DIS;
 - colonne personalizzate di tipo flag, voto e testo, con modifica delle celle nella griglia da tastiera, comprese le colonne anagrafiche;
 - viste personali con nome: ordine e visibilità delle colonne, ordinamento delle righe;
-- archivio personale degli esercizi a risposta multipla, con varianti, testi Typst, risposta corretta, ricerca e anteprima.
+- archivio personale degli esercizi a risposta multipla, con varianti, testi Typst, risposta corretta, ricerca e anteprima;
+- token API personali per l'accesso programmatico a GraphQL, con permessi completi o in sola lettura.
 
 Non sono ancora implementati condivisione dei corsi, collegamento account, pannello amministrativo, reimportazioni, preparazione e stampa dei compiti, codice compito, correzione della risposta multipla, formule, riepilogo del corso e collegamenti tra tabelle.
 
@@ -28,6 +29,17 @@ Chiunque completi il login con **Google** o **UniPi (WSO2)** può accedere e cre
 L'account viene creato al primo login ed è identificato dalla coppia provider/subject, indipendentemente dagli studenti valutati. Nome ed email sono aggiornati dai dati del provider a ogni accesso. Account Google e UniPi restano separati anche con la stessa email; il collegamento di più identità non è implementato.
 
 Le sessioni durano sette giorni e sono revocabili: il logout invalida la sessione corrente, senza disconnettere l'account Google/UniPi negli altri servizi.
+
+### Token API
+
+Per usare GraphQL da script e programmi ogni utente può creare token API personali dalla pagina «Token API» del menu utente. Decisioni concordate:
+
+- il token agisce come l'utente che lo ha creato e vede soltanto i suoi corsi ed esercizi;
+- alla creazione si sceglie fra accesso completo e sola lettura; un token in sola lettura non può eseguire alcuna mutation;
+- alla creazione si sceglie la scadenza fra 30 giorni, 90 giorni, un anno o nessuna scadenza; ogni token è revocabile in qualsiasi momento;
+- il token è mostrato una sola volta alla creazione; Gradient ne conserva soltanto un'impronta e, per ciascuno, nome, permessi, date di creazione e scadenza e l'ultimo utilizzo approssimato all'ora;
+- i token si creano, elencano e revocano soltanto dall'interfaccia web dopo il login, non tramite un altro token;
+- il logout non revoca i token, che restano validi fino a scadenza o revoca.
 
 La migrazione `0004` ha aggiunto utenti, sessioni e proprietario dei corsi. I corsi precedenti sono conservati con proprietario mancante e non sono visibili a nessun account. La loro assegnazione deve essere esplicita, dopo aver identificato il corso e l'ID dell'utente; non vengono attribuiti automaticamente al primo accesso. Non è ancora presente un pannello amministrativo di gestione o assegnazione.
 

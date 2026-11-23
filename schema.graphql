@@ -12,6 +12,24 @@ input AddStudentInput {
   lastName: String! = ""
 }
 
+type ApiToken {
+  id: ID!
+  name: String!
+  readOnly: Boolean!
+  createdAt: DateTime!
+
+  """Assente se il token non scade."""
+  expiresAt: DateTime
+
+  """Approssimato all'ora."""
+  lastUsedAt: DateTime
+}
+
+type ApiTokenResult {
+  token: ApiToken
+  errors: [FieldError!]!
+}
+
 type Cell {
   columnId: ID!
   display: String!
@@ -58,6 +76,14 @@ type CourseTable {
   location: String
 }
 
+input CreateApiTokenInput {
+  name: String!
+  readOnly: Boolean! = false
+
+  """Assente per un token senza scadenza."""
+  expiresInDays: Int = null
+}
+
 input CreateCourseInput {
   name: String!
   academicYear: String!
@@ -69,6 +95,14 @@ input CreateTableInput {
   name: String!
   date: Date = null
   location: String = null
+}
+
+type CreatedApiToken {
+  token: ApiToken
+
+  """Valore da usare come Bearer; restituito soltanto alla creazione."""
+  secret: String
+  errors: [FieldError!]!
 }
 
 type CsvImportResult {
@@ -216,6 +250,10 @@ type Mutation {
   """Rende la vista quella in uso per la sua tabella."""
   selectTableView(viewId: ID!): ViewResult!
   deleteTableView(viewId: ID!): ViewsResult!
+
+  """Crea un token API; il segreto è restituito una sola volta."""
+  createApiToken(input: CreateApiTokenInput!): CreatedApiToken!
+  revokeApiToken(id: ID!): ApiTokenResult!
 }
 
 input PreviewCsvInput {
@@ -243,6 +281,9 @@ type Query {
   Viste personali dell'utente: ordine e visibilità delle colonne, ordinamento delle righe.
   """
   tableViews(tableId: ID!): [TableView!]!
+
+  """Token API personali; disponibile soltanto con il login dal browser."""
+  apiTokens: [ApiToken!]!
 }
 
 type RowSort {
